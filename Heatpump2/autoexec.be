@@ -20,13 +20,16 @@ def control_house_climate()
 
 	var hour = tasmota.time_dump(tasmota.rtc()['local'])['hour']
 
-	if (hour > 1 && hour < 10)
+	if (hour >= 1 && hour < 10)
 		standby = true
 	end
 
 	if (!thermostat_active || standby)
 		activatewaittimer = 0
 		if (deactivatewaittimer < 300)
+			if (deactivatewaittimer == 0)
+				print ("Thermostat Off, Deactivate Timer Start")
+			end
 			deactivatewaittimer = deactivatewaittimer + 1
 		else
 			if (outputs[0] || outputs[1] || !initialized)
@@ -42,6 +45,9 @@ def control_house_climate()
 	elif (!mode_cool && (outputs[0] || !outputs[1]) || !initialized)
 		deactivatewaittimer = 0
 		if (activatewaittimer < 720)
+			if (activatewaittimer == 0)
+				print ("Thermostat On, Activate Timer Start")
+			end
 			activatewaittimer = activatewaittimer + 1
 		else
 			print ("Thermostat On, Heatpump Heat")
@@ -51,6 +57,9 @@ def control_house_climate()
 	elif (mode_cool && (!outputs[0] || outputs[1]) || !initialized)
 		deactivatewaittimer = 0
 		if (activatewaittimer < 600)
+			if (activatewaittimer == 0)
+				print ("Thermostat On, Activate Timer Start")
+			end
 			activatewaittimer = activatewaittimer + 1
 		else
 			print ("Thermostat On, Heatpump Cool")
