@@ -1,6 +1,6 @@
 # Input List
 # 0 = Thermostat
-# 3 = Cool/Hear Switch
+# 3 = Cool/Heat Switch
 
 # Output List
 # 0 = Cool
@@ -9,7 +9,7 @@
 var mode_heat_old = false
 var initialized = false
 var activatewaittimer = 10000
-var deactivatewaittimer = 10000
+var deactivatewaittimer = 5000
 
 def control_house_climate()
 	var inputs = tasmota.get_switches()
