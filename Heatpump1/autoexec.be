@@ -86,6 +86,7 @@ def control_house_climate()
     else
 		if (deactivatewaittimer_livingroom < 300)
 			deactivatewaittimer_livingroom = deactivatewaittimer_livingroom + 1
+			thermostat_active = true
 		else
 			deactivatewaittimer_livingroom = 0
 			if (pump_run)
@@ -113,6 +114,7 @@ def control_house_climate()
     else
 		if (deactivatewaittimer_kitchen < 300)
 			deactivatewaittimer_kitchen = deactivatewaittimer_kitchen + 1
+			thermostat_active = true
 		else
 			deactivatewaittimer_kitchen = 0
 			if (pump_run)
@@ -138,6 +140,7 @@ def control_house_climate()
     else
 		if (deactivatewaittimer_appartment < 300)
 			deactivatewaittimer_appartment = deactivatewaittimer_appartment + 1
+			thermostat_active = true
 		else
 			deactivatewaittimer_appartment = 0
 			if (pump_run)
