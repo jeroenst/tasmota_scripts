@@ -81,11 +81,11 @@ def control_house_climate()
         if (outputs[0] == false) 
             print ("Livingroom Valve/Pump Active")
             tasmota.set_power(0, true)
-			deactivatewaittimer_livingroom = 0
+			deactivatewaittimer_livingroom = 300
         end
     else
-		if (deactivatewaittimer_livingroom < 300)
-			deactivatewaittimer_livingroom = deactivatewaittimer_livingroom + 1
+		if (deactivatewaittimer_livingroom > 0)
+			deactivatewaittimer_livingroom = deactivatewaittimer_livingroom - 1
 			thermostat_active = true
 		else
 			deactivatewaittimer_livingroom = 0
@@ -109,11 +109,11 @@ def control_house_climate()
         if (outputs[1] == false) 
             print ("Kitchen Valve/Pump Active")
             tasmota.set_power(1, true)
-			deactivatewaittimer_kitchen = 0
+			deactivatewaittimer_kitchen = 300
         end
     else
-		if (deactivatewaittimer_kitchen < 300)
-			deactivatewaittimer_kitchen = deactivatewaittimer_kitchen + 1
+		if (deactivatewaittimer_kitchen > 0)
+			deactivatewaittimer_kitchen = deactivatewaittimer_kitchen - 1
 			thermostat_active = true
 		else
 			deactivatewaittimer_kitchen = 0
@@ -136,10 +136,11 @@ def control_house_climate()
         if (outputs[2] == false) 
             print ("Appartment Valve/Pump Active")
             tasmota.set_power(2, true)
+			deactivatewaittimer_appartment = 300
         end
     else
-		if (deactivatewaittimer_appartment < 300)
-			deactivatewaittimer_appartment = deactivatewaittimer_appartment + 1
+		if (deactivatewaittimer_appartment > 0)
+			deactivatewaittimer_appartment = deactivatewaittimer_appartment - 1
 			thermostat_active = true
 		else
 			deactivatewaittimer_appartment = 0
