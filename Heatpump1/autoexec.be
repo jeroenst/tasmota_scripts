@@ -15,14 +15,16 @@
 # 5 = Heatpump Request Cool
 # 6 = Heatpump Request DHW
 
-var gas_override_old = false;
-var mode_heat_old = false;
-var initialized = false;
+var deactivate_timeout = 3600
+
+var gas_override_old = false
+var mode_heat_old = false
+var initialized = false
 var pump_run = false
 
-var deactivatewaittimer_kitchen = 0
-var deactivatewaittimer_livingroom = 0
-var deactivatewaittimer_appartment = 0
+var deactivatewaittimer_kitchen = deactivate_timeout
+var deactivatewaittimer_livingroom = deactivate_timeout
+var deactivatewaittimer_appartment = deactivate_timeout
 
 # run_pump enables the pump once a day to prevent them getting stuck
 def run_pump()
@@ -78,24 +80,26 @@ def control_house_climate()
 
     if ((thermostat_livingroom == mode_heat) && !invalid_mode)
         thermostat_active = true
+		deactivatewaittimer_livingroom = 0
         if (outputs[0] == false) 
             print ("Livingroom Valve/Pump Active")
             tasmota.set_power(0, true)
-			deactivatewaittimer_livingroom = 300
         end
     else
-		if (deactivatewaittimer_livingroom > 0)
-			deactivatewaittimer_livingroom = deactivatewaittimer_livingroom - 1
-			thermostat_active = true
-		else
-			deactivatewaittimer_livingroom = 0
-			if (pump_run)
-				if (outputs[0] == false)
-					print ("Livingroom Pump Run")
-					tasmota.set_power(0, true)
-				end
-			else 
-				if (outputs[0] == true) 
+		if (pump_run)
+			if (outputs[0] == false)
+				print ("Livingroom Pump Run")
+				tasmota.set_power(0, true)
+			end
+		else 
+			if (outputs[0] == true) 
+				if (deactivatewaittimer_livingroom < deactivate_timeout)
+					if (deactivatewaittimer_livingroom == 0)
+						print ("Livingroom Thermostat Deactivated, starting timer")
+					end
+					deactivatewaittimer_livingroom = deactivatewaittimer_livingroom + 1
+					thermostat_active = true
+				else	
 					print ("Livingroom Valve/Pump Inactive")
 					tasmota.set_power(0, false)
 				end
@@ -106,24 +110,26 @@ def control_house_climate()
 
     if ((thermostat_kitchen == mode_heat) && !invalid_mode)
         thermostat_active = true
+		deactivatewaittimer_kitchen = 0
         if (outputs[1] == false) 
             print ("Kitchen Valve/Pump Active")
             tasmota.set_power(1, true)
-			deactivatewaittimer_kitchen = 300
         end
     else
-		if (deactivatewaittimer_kitchen > 0)
-			deactivatewaittimer_kitchen = deactivatewaittimer_kitchen - 1
-			thermostat_active = true
-		else
-			deactivatewaittimer_kitchen = 0
-			if (pump_run)
-				if (outputs[1] == false)
-					print ("Kitchen Pump Run")
-					tasmota.set_power(1, true)
-				end
-			else 
-				if (outputs[1] == true) 
+		if (pump_run)
+			if (outputs[1] == false)
+				print ("Kitchen Pump Run")
+				tasmota.set_power(1, true)
+			end
+		else 
+			if (outputs[1] == true) 
+				if (deactivatewaittimer_kitchen < deactivate_timeout)
+					if (deactivatewaittimer_kitchen == 0)
+						print ("Kitchen Thermostat Deactivated, starting timer")
+					end
+					deactivatewaittimer_kitchen = deactivatewaittimer_kitchen + 1
+					thermostat_active = true
+				else	
 					print ("Kitchen Valve/Pump Inactive")
 					tasmota.set_power(1, false)
 				end
@@ -133,24 +139,26 @@ def control_house_climate()
     
     if ((thermostat_appartment == mode_heat) && !invalid_mode)
         thermostat_active = true
+		deactivatewaittimer_appartment = 0
         if (outputs[2] == false) 
             print ("Appartment Valve/Pump Active")
             tasmota.set_power(2, true)
-			deactivatewaittimer_appartment = 300
         end
     else
-		if (deactivatewaittimer_appartment > 0)
-			deactivatewaittimer_appartment = deactivatewaittimer_appartment - 1
-			thermostat_active = true
-		else
-			deactivatewaittimer_appartment = 0
-			if (pump_run)
-				if (outputs[2] == false)
-					print ("Appartment Pump Run")
-					tasmota.set_power(2, true)
-				end
-			else 
-				if (outputs[2] == true) 
+		if (pump_run)
+			if (outputs[2] == false)
+				print ("Appartment Pump Run")
+				tasmota.set_power(2, true)
+			end
+		else 
+			if (outputs[2] == true) 
+				if (deactivatewaittimer_appartment < deactivate_timeout)
+					if (deactivatewaittimer_appartment == 0)
+						print ("Appartment Thermostat Deactivated, starting timer")
+					end
+					deactivatewaittimer_appartment = deactivatewaittimer_appartment + 1
+					thermostat_active = true
+				else
 					print ("Appartment Valve/Pump Inactive")
 					tasmota.set_power(2, false)
 				end

@@ -8,8 +8,8 @@
 
 var mode_heat_old = false
 var initialized = false
-var activatewaittimer = 10000
-var deactivatewaittimer = 5000
+var activatewaittimer = 0
+var deactivatewaittimer = 0
 
 def control_house_climate()
 	var inputs = tasmota.get_switches()
@@ -26,7 +26,7 @@ def control_house_climate()
 
 	if (!thermostat_active || standby)
 		activatewaittimer = 0
-		if (deactivatewaittimer < 300)
+		if ((deactivatewaittimer < 300) && initialized)
 			if (deactivatewaittimer == 0)
 				print ("Thermostat Off, Deactivate Timer Start")
 			end
@@ -42,26 +42,18 @@ def control_house_climate()
 				tasmota.set_power(1, false)
 			end
 		end
-	elif (!mode_cool && (outputs[0] || !outputs[1]) || !initialized)
+	else
 		deactivatewaittimer = 0
-		if (activatewaittimer < 720)
+		if ((activatewaittimer < 600) && initialized)
 			if (activatewaittimer == 0)
 				print ("Thermostat On, Activate Timer Start")
 			end
 			activatewaittimer = activatewaittimer + 1
-		else
+		elif (!mode_cool && (outputs[0] || !outputs[1]) || !initialized)
 			print ("Thermostat On, Heatpump Heat")
 			tasmota.set_power(0, false)
 			tasmota.set_power(1, true)
-		end
-	elif (mode_cool && (!outputs[0] || outputs[1]) || !initialized)
-		deactivatewaittimer = 0
-		if (activatewaittimer < 600)
-			if (activatewaittimer == 0)
-				print ("Thermostat On, Activate Timer Start")
-			end
-			activatewaittimer = activatewaittimer + 1
-		else
+		elif (mode_cool && (!outputs[0] || outputs[1]) || !initialized)
 			print ("Thermostat On, Heatpump Cool")
 			tasmota.set_power(0, true)
 			tasmota.set_power(1, false)
