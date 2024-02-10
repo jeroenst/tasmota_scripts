@@ -10,6 +10,7 @@
 	var electricity_kw_using, electricity_kw_providing
 	var electricity_kwh_used_1, electricity_kwh_used_2
 	var electricity_kwh_provided_1, electricity_kwh_provided_2
+	var electricity_volt
 	var gas_m3, gas_datetime
 	var sermsg, serline
   
@@ -19,18 +20,36 @@
 	end
 
 	def process_dmsr(serline)
+		var value = string.split(serline,"(")[1]
+		value = string.split(value,")")[0];
+		var value2 = string.split(serline,"(")[2]
+		value2 = string.split(value2,")")[0];
+		if (string.count(serline, "1-0:1.8.1")) electricity_kwh_used_1 = value
+		if (string.count(serline, "1-0:2.8.1")) electricity_kwh_provided_1 = value
+		if (string.count(serline, "1-0:1.8.2")) electricity_kwh_used_2 = value
+		if (string.count(serline, "1-0:2.8.1")) electricity_kwh_provided_1 = value
+		if (string.count(serline, "1-0:2.8.2")) electricity_kwh_provided_2 = value
+		if (string.count(serline, "1-0:1.7.0")) electricity_kw_using = value
+		if (string.count(serline, "1-0:2.7.0")) electricity_kw_providing = value
+		if (string.count(serline, "1-0:32.7.0")) electricity_volt = value
+		if (string.count(serline, "0-1:24.2.1")) gas_datetime = value1
+		if (string.count(serline, "0-1:24.2.1")) gas_m3 = value2
 	end
 
 	def read_dsmr()
 		import string
 		if (ser.available() > 0)
 			sermsg += ser.read().asstring()
+			var lastlineendpos = 0
+			var serline = ""
 			for i:0..size(sermsg)-1
 				if ((sermsg[i] == 10) || (sermsg[i] == 13))
-					process_dmsr(serline)
+					if (serline != "") process_dmsr(serline)
 					serline = ""
-				else serline += a[i]
+					lastlineendpos = i
+				else serline += sermsg[i]
 			end
+			sermsg = string.split(sermsg, i)
 		end
 	end
   
