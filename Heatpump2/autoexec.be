@@ -22,11 +22,11 @@ def control_house_climate()
 	var thermostat_active = inputs[0]
 	var mode_cool = inputs[3]
 
-
 	tasmota.set_timer(1000,control_house_climate)
 
 	# If outside temperature is freezing ignore standby and run heatpump
-	# if it is not freezing go to standby if input 1 is high.
+	# if it is not freezing go to standby if input 1 is low.
+	# if dewpoint higher than 16 the stop heatpump when cooling mode is active
 	var outside_temperature = nil;
 	var outside_dewpoint = nil;
 	var sensors=json.load(tasmota.read_sensors())
@@ -35,10 +35,19 @@ def control_house_climate()
 		outside_dewpoint = sensors['SHT4X']['DewPoint']
 		
 		if (outside_temperature < 0) 
-		    standby = 0
+			standby = 0
 		end
 		if (outside_temperature > 1)
-		    standby = !inputs[1]
+			standby = !inputs[1]
+		end
+
+		if (mode_cool)
+			if (outside_dewpoint > 16)
+				standby = 1;
+			end
+			if (outside_dewpoint < 15)
+				standby = !inputs[1]
+			end		
 		end
 	else
 		standby = !inputs[1]
