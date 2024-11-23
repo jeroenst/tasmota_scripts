@@ -42,10 +42,10 @@ def control_house_climate()
 		end
 
 		if (mode_cool)
-			if (outside_dewpoint > 16)
+			if (outside_dewpoint > 15)
 				standby = 1;
 			end
-			if (outside_dewpoint < 15)
+			if (outside_dewpoint < 14)
 				standby = !inputs[1]
 			end		
 		end
