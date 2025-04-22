@@ -15,6 +15,8 @@
 # 5 = Heatpump Request Cool
 # 6 = Heatpump Request DHW
 
+import mqtt 
+
 var deactivate_timeout = 3600
 
 var gas_override_old = false
@@ -25,6 +27,8 @@ var pump_run = false
 var deactivatewaittimer_kitchen = deactivate_timeout
 var deactivatewaittimer_livingroom = deactivate_timeout
 var deactivatewaittimer_appartment = deactivate_timeout
+
+var remote_stop = false;
 
 # run_pump enables the pump once a day to prevent them getting stuck
 def run_pump()
@@ -49,6 +53,11 @@ def control_house_climate()
 
     var thermostat_active = false
     var invalid_mode = false
+
+
+	if (mqtt.connected() == false) 
+		remote_stop = false
+	end
 
     if (gas_override != gas_override_old || !initialized)
         if (gas_override)
@@ -182,7 +191,7 @@ def control_house_climate()
             end
         else
             if (mode_heat)
-                if (outputs[5] == true) 
+                if (outputs[5] == true && !remote_stop)
                     print ("Stopping cool from Heat Pump")
                     tasmota.set_power(5, false)
                 end 
@@ -210,13 +219,15 @@ def control_house_climate()
                     print ("Stopping heat from Heat Pump")
                    tasmota.set_power(4, false)
                 end
-                if (outputs[5] == false) 
+                if (outputs[5] == false & !remote_stop)
                     print ("Requesting cool from Heat Pump")
                     tasmota.set_power(5, true)
                 end
             end
         end
-    else
+	end
+	
+    if (!thermostat_active || remote_stop)
         if (outputs[4] == true) 
             print ("Stopping heat from Heat Pump")
             tasmota.set_power(4, false)
@@ -244,5 +255,19 @@ def control_house_climate()
     initialized=true
 end
 
+# subscribe to mqtt topic for remote stop
+
+def remotestop(topic, idx, data, databytes)
+	if (data == "1") 
+		remote_stop = true;
+		print ("Remote Stop Active")
+	else 
+		print ("Remote Stop Inactive")
+		remote_stop = false;
+	end
+
+end
+
 tasmota.set_timer(10000,control_house_climate)
 run_pump()
+mqtt.subscribe("0006/TASMOTA-HEATPUMP/berrycmd/remotestop",remotestop)
