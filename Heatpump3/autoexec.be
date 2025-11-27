@@ -12,9 +12,8 @@
 # 3 = Valve Bathroom
 # 4 = Pump Central Heating
 # 5 = Boiler Heating Element
-# 6 = Not Used
-# 7 = SG1
-# 8 = SG2
+# 6 = SG1
+# 7 = SG2
 
 import mqtt
 
@@ -32,8 +31,6 @@ def controlheatpump()
     var valve_livingroom = false
     var valve_bathroom = false
     var pump_ch = false
-#    var smartgrid1 = outputs[4]
-#    var smartgrid2 = outputs[5]
 
     if (!switch_cool)
         if (thermostat_livingroom)
