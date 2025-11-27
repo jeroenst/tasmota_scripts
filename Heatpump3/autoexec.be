@@ -10,8 +10,11 @@
 # 1 = Heat
 # 2 = Valve Livingroom
 # 3 = Valve Bathroom
-# 4 = SG1
-# 5 = SG2
+# 4 = Pump Central Heating
+# 5 = Boiler Heating Element
+# 6 = Not Used
+# 7 = SG1
+# 8 = SG2
 
 import mqtt
 
@@ -24,34 +27,46 @@ def controlheatpump()
     
     tasmota.set_timer(10000,controlheatpump)
 
-    var heat = 0
-    var cool = 0
-    var valve_livingroom = 0
-    var valve_bathroom = 0
+    var hp_heat = false
+    var hp_cool = false
+    var valve_livingroom = false
+    var valve_bathroom = false
+    var pump_ch = false
 #    var smartgrid1 = outputs[4]
 #    var smartgrid2 = outputs[5]
 
     if (!switch_cool)
         if (thermostat_livingroom)
             print ("Heat Livingroom")
-            valve_livingroom = 1
-            heat = 1
+            valve_livingroom = true
+            hp_heat = true
         end
         if (thermostat_bathroom)
             print ("Heat Bathroom")
-            valve_bathroom = 1
-            heat = 1
+            valve_bathroom = true
+            hp_heat = true
         end
     else
         if (!thermostat_livingroom)
             print ("Cool Livingroom")
-            valve_livingroom = 1
-            cool = 1
+            valve_livingroom = true
+            hp_cool = true
         end
     end
+
     if (!valve_livingroom && !valve_bathroom)
         print ("No heat or cool request")
     end
+
+    if (valve_livingroom || valve_bathroom)
+        pump_ch = true;
+    end    
+
+    tasmota.set_power(0, hp_heat)
+    tasmota.set_power(1, hp_cool)
+    tasmota.set_power(2, valve_livingroom)
+    tasmota.set_power(3, valve_bathroom)
+    tasmota.set_power(4, pump_ch)
 end
 
 var sendmodbusindex = 0
