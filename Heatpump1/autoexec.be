@@ -16,6 +16,8 @@
 # 6 = Heatpump Request DHW
 
 import mqtt 
+#import json
+import string
 
 var deactivate_timeout = 3600
 
@@ -29,6 +31,8 @@ var deactivatewaittimer_livingroom = deactivate_timeout
 var deactivatewaittimer_appartment = deactivate_timeout
 
 var remote_stop = false;
+
+var outside_temperature = nil;
 
 # run_pump enables the pump once a day to prevent them getting stuck
 def run_pump()
@@ -191,11 +195,11 @@ def control_house_climate()
             end
         else
             if (mode_heat)
-                if (outputs[5] == true && !remote_stop)
+                if (outputs[5] == true)
                     print ("Stopping cool from Heat Pump")
                     tasmota.set_power(5, false)
                 end 
-                if (outputs[4] == false) 
+                if (outputs[4] == false && !remote_stop) 
                     print ("Requesting heat from Heat Pump")
                     tasmota.set_power(4, true)
                 end
@@ -219,7 +223,7 @@ def control_house_climate()
                     print ("Stopping heat from Heat Pump")
                    tasmota.set_power(4, false)
                 end
-                if (outputs[5] == false & !remote_stop)
+                if (outputs[5] == false && !remote_stop)
                     print ("Requesting cool from Heat Pump")
                     tasmota.set_power(5, true)
                 end
@@ -268,6 +272,61 @@ def remotestop(topic, idx, data, databytes)
 
 end
 
+var sendmodbusindex = 0
+def sendmodbus()
+    tasmota.set_timer(2000,sendmodbus)
+    if (sendmodbusindex == 0)
+        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 1, "startaddress":  0, "type": "bit", "count": 5 }')
+    end
+    if (sendmodbusindex == 1)
+        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 2, "startaddress":  0, "type": "bit", "count": 17 }')
+    end
+    if (sendmodbusindex == 2)
+        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 3, "startaddress":  0, "type": "int16", "count": 10 }')
+    end
+    if (sendmodbusindex == 3)
+        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  0, "type": "int16", "count": 13 }')
+    end
+    if (sendmodbusindex == 4)
+        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  18, "type": "int16", "count":  7}')
+        sendmodbusindex = 0
+    else
+        sendmodbusindex = sendmodbusindex + 1
+    end
+end
+
+def modbusreceived(value, trigger)
+    if (value['DeviceAddress'] == 1)
+        if (value['FunctionCode'] == 4)
+            if (value['StartAddress'] == 0)
+                if (value['Count'] >= 13)
+                    print(string.format("Outside Temperature=%.1f",value["Values"][12]*0.1));
+                    outside_temperature = value["Values"][12]
+                end
+            end
+        end
+    end
+end
+
+tasmota.set_timer(5000,sendmodbus)
 tasmota.set_timer(10000,control_house_climate)
 run_pump()
 mqtt.subscribe("0006/TASMOTA-HEATPUMP/berrycmd/remotestop",remotestop)
+tasmota.add_rule("ModbusReceived", modbusreceived)
+
+
+class showsensor
+	#- display sensor value in the web UI -#
+	def web_sensor()
+            import string
+            if (outside_temperature != nil)
+		var msg = string.format(
+		    "{s}Outside Temperature{m}%.1f °C{e}",
+		    outside_temperature * 0.1)
+		tasmota.web_send_decimal(msg)
+            end
+	end
+end
+
+drv = showsensor()
+tasmota.add_driver(drv)
