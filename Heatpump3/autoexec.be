@@ -6,8 +6,8 @@
 # 4 = BUH Active
 
 # Output List
-# 0 = Cool
-# 1 = Heat
+# 0 = Heat
+# 1 = Cool
 # 2 = Valve Livingroom
 # 3 = Valve Bathroom
 # 4 = Pump Central Heating
