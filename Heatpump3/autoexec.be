@@ -16,6 +16,10 @@
 # 7 = SG2
 
 import mqtt
+import string
+
+var remote_heat_request = false;
+var outside_temperature = nil;
 
 def controlheatpump()
     var inputs = tasmota.get_switches()
@@ -43,6 +47,10 @@ def controlheatpump()
             valve_bathroom = true
             hp_heat = true
         end
+        if (remote_heat_request)
+            print ("Heat Remote")
+            hp_heat = true
+        end
     else
         if (!thermostat_livingroom)
             print ("Cool Livingroom")
@@ -55,16 +63,27 @@ def controlheatpump()
         print ("No heat or cool request")
     end
 
-    if (valve_livingroom || valve_bathroom)
+    if (hp_heat || hp_cool)
         pump_ch = true;
     end    
 
-    tasmota.set_power(0, hp_heat)
-    tasmota.set_power(1, hp_cool)
-    tasmota.set_power(2, valve_livingroom)
-    tasmota.set_power(3, valve_bathroom)
-    tasmota.set_power(4, pump_ch)
+    if (outputs[0] != hp_heat) 
+        tasmota.set_power(0, hp_heat)
+    end
+    if (outputs[1] != hp_cool)
+        tasmota.set_power(1, hp_cool)
+    end
+    if (outputs[2] != valve_livingroom)
+        tasmota.set_power(2, valve_livingroom)
+    end
+    if (outputs[3] != valve_bathroom)
+        tasmota.set_power(3, valve_bathroom)
+    end
+    if (outputs[4] != pump_ch)
+        tasmota.set_power(4, pump_ch)
+    end
 end
+tasmota.set_timer(5000,controlheatpump)
 
 var sendmodbusindex = 0
 def sendmodbus()
@@ -88,6 +107,48 @@ def sendmodbus()
         sendmodbusindex = sendmodbusindex + 1
     end
 end
-
-tasmota.set_timer(5000,controlheatpump)
 tasmota.set_timer(5000,sendmodbus)
+
+
+def mqttheatrequest(topic, idx, data, databytes)
+	if (data == "1") 
+		remote_heat_request = true;
+		print ("Remote Heat Request Active")
+	else 
+		print ("Remote Heat Request Inactive")
+		remote_heat_request = false;
+	end
+end
+mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/heatrequest",mqttheatrequest)
+
+
+def modbusreceived(value, trigger)
+    if (value['DeviceAddress'] == 1)
+        if (value['FunctionCode'] == 4)
+            if (value['StartAddress'] == 0)
+                if (value['Count'] >= 13)
+                    print(string.format("Outside Temperature=%.1f",value["Values"][12]*0.1));
+                    outside_temperature = value["Values"][12]
+                end
+            end
+        end
+    end
+end
+tasmota.add_rule("ModbusReceived", modbusreceived)
+
+
+class showsensor
+	#- display sensor value in the web UI -#
+	def web_sensor()
+		import string
+		var msg = "{s}Outside Temperature{m}- °C{e}"
+		if (outside_temperature != nil)
+			msg = string.format(
+		          "{s}Outside Temperature{m}%.1f °C{e}",
+		           outside_temperature * 0.1)
+		end
+		tasmota.web_send_decimal(msg)
+	end
+end
+drv = showsensor()
+tasmota.add_driver(drv)
