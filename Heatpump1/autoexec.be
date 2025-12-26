@@ -65,9 +65,9 @@ def control_house_climate()
 
     if (gas_override != gas_override_old || !initialized)
         if (gas_override)
-            print ("Gas Boiler Override Activated")
+            print("Gas Boiler Override Activated")
         else
-            print ("Gas Boiler Override Deactivated")
+            print("Gas Boiler Override Deactivated")
         end
         gas_override_old = gas_override
     end
@@ -80,12 +80,12 @@ def control_house_climate()
         
     if (mode_heat != mode_heat_old || !initialized)
         if (mode_heat)
-            print ("Heating Mode Activated")
+            print("Heating Mode Activated")
         else
             if (!invalid_mode) 
-                print ("Cooling Mode Activated")
+                print("Cooling Mode Activated")
             else
-                print ("Invalid Mode Selected (Cool and Gas)")
+                print("Invalid Mode Selected (Cool and Gas)")
             end
         end
         mode_heat_old = mode_heat
@@ -95,25 +95,25 @@ def control_house_climate()
         thermostat_active = true
 		deactivatewaittimer_livingroom = 0
         if (outputs[0] == false) 
-            print ("Livingroom Valve/Pump Active")
+            print("Livingroom Valve/Pump Active")
             tasmota.set_power(0, true)
         end
     else
 		if (pump_run)
 			if (outputs[0] == false)
-				print ("Livingroom Pump Run")
+				print("Livingroom Pump Run")
 				tasmota.set_power(0, true)
 			end
 		else 
 			if (outputs[0] == true) 
 				if (deactivatewaittimer_livingroom < deactivate_timeout)
 					if (deactivatewaittimer_livingroom == 0)
-						print ("Livingroom Thermostat Deactivated, starting timer")
+						print("Livingroom Thermostat Deactivated, starting timer")
 					end
 					deactivatewaittimer_livingroom = deactivatewaittimer_livingroom + 1
 					thermostat_active = true
 				else	
-					print ("Livingroom Valve/Pump Inactive")
+					print("Livingroom Valve/Pump Inactive")
 					tasmota.set_power(0, false)
 				end
 			end
@@ -125,25 +125,25 @@ def control_house_climate()
         thermostat_active = true
 		deactivatewaittimer_kitchen = 0
         if (outputs[1] == false) 
-            print ("Kitchen Valve/Pump Active")
+            print("Kitchen Valve/Pump Active")
             tasmota.set_power(1, true)
         end
     else
 		if (pump_run)
 			if (outputs[1] == false)
-				print ("Kitchen Pump Run")
+				print("Kitchen Pump Run")
 				tasmota.set_power(1, true)
 			end
 		else 
 			if (outputs[1] == true) 
 				if (deactivatewaittimer_kitchen < deactivate_timeout)
 					if (deactivatewaittimer_kitchen == 0)
-						print ("Kitchen Thermostat Deactivated, starting timer")
+						print("Kitchen Thermostat Deactivated, starting timer")
 					end
 					deactivatewaittimer_kitchen = deactivatewaittimer_kitchen + 1
 					thermostat_active = true
 				else	
-					print ("Kitchen Valve/Pump Inactive")
+					print("Kitchen Valve/Pump Inactive")
 					tasmota.set_power(1, false)
 				end
 			end
@@ -154,25 +154,25 @@ def control_house_climate()
         thermostat_active = true
 		deactivatewaittimer_appartment = 0
         if (outputs[2] == false) 
-            print ("Appartment Valve/Pump Active")
+            print("Appartment Valve/Pump Active")
             tasmota.set_power(2, true)
         end
     else
 		if (pump_run)
 			if (outputs[2] == false)
-				print ("Appartment Pump Run")
+				print("Appartment Pump Run")
 				tasmota.set_power(2, true)
 			end
 		else 
 			if (outputs[2] == true) 
 				if (deactivatewaittimer_appartment < deactivate_timeout)
 					if (deactivatewaittimer_appartment == 0)
-						print ("Appartment Thermostat Deactivated, starting timer")
+						print("Appartment Thermostat Deactivated, starting timer")
 					end
 					deactivatewaittimer_appartment = deactivatewaittimer_appartment + 1
 					thermostat_active = true
 				else
-					print ("Appartment Valve/Pump Inactive")
+					print("Appartment Valve/Pump Inactive")
 					tasmota.set_power(2, false)
 				end
 			end
@@ -189,42 +189,42 @@ def control_house_climate()
             end
             if (mode_heat)
                 if (outputs[3] == false) 
-                    print ("Requesting heat from Gas Boiler")
+                    print("Requesting heat from Gas Boiler")
                     tasmota.set_power(3, true)
                 end
             end
         else
             if (mode_heat)
                 if (outputs[5] == true)
-                    print ("Stopping cool from Heat Pump")
+                    print("Stopping cool from Heat Pump")
                     tasmota.set_power(5, false)
                 end 
                 if (outputs[4] == false && !remote_stop) 
-                    print ("Requesting heat from Heat Pump")
+                    print("Requesting heat from Heat Pump")
                     tasmota.set_power(4, true)
                 end
                 if (gas_request)
                     if (outputs[3] == false) 
-                        print ("Requesting heat from Gas Boiler (initiated by heatpump)")
+                        print("Requesting heat from Gas Boiler (initiated by heatpump)")
                         tasmota.set_power(3, true)
                     end    
                 else
                     if (outputs[3] == true) 
-                        print ("Stopping heat from Gas Boiler")
+                        print("Stopping heat from Gas Boiler")
                         tasmota.set_power(3, false)
                     end
                 end
             else
                 if (outputs[3] == true) 
-                    print ("Stopping heat from Gas Boiler")
+                    print("Stopping heat from Gas Boiler")
                     tasmota.set_power(3, false)
                 end
                 if (outputs[4] == true) 
-                    print ("Stopping heat from Heat Pump")
+                    print("Stopping heat from Heat Pump")
                    tasmota.set_power(4, false)
                 end
                 if (outputs[5] == false && !remote_stop)
-                    print ("Requesting cool from Heat Pump")
+                    print("Requesting cool from Heat Pump")
                     tasmota.set_power(5, true)
                 end
             end
@@ -233,15 +233,15 @@ def control_house_climate()
 	
     if (!thermostat_active || remote_stop)
         if (outputs[4] == true) 
-            print ("Stopping heat from Heat Pump")
+            print("Stopping heat from Heat Pump")
             tasmota.set_power(4, false)
         end
         if (outputs[5] == true) 
-            print ("Stopping cool from Heat Pump")
+            print("Stopping cool from Heat Pump")
             tasmota.set_power(5, false)
         end
         if (outputs[3] == true) 
-            print ("Stopping heat from Gas Boiler")
+            print("Stopping heat from Gas Boiler")
             tasmota.set_power(3, false)
         end
     end
@@ -264,9 +264,9 @@ end
 def remotestop(topic, idx, data, databytes)
 	if (data == "1") 
 		remote_stop = true;
-		print ("Remote Stop Active")
+		print("Remote Stop Active")
 	else 
-		print ("Remote Stop Inactive")
+		print("Remote Stop Inactive")
 		remote_stop = false;
 	end
 
@@ -276,19 +276,19 @@ var sendmodbusindex = 0
 def sendmodbus()
     tasmota.set_timer(2000,sendmodbus)
     if (sendmodbusindex == 0)
-        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 1, "startaddress":  0, "type": "bit", "count": 5 }')
+        tasmota.cmd('modbussend { "deviceaddress": 1, "functioncode": 1, "startaddress":  0, "type": "bit", "count": 5 }')
     end
     if (sendmodbusindex == 1)
-        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 2, "startaddress":  0, "type": "bit", "count": 17 }')
+        tasmota.cmd('modbussend { "deviceaddress": 1, "functioncode": 2, "startaddress":  0, "type": "bit", "count": 17 }')
     end
     if (sendmodbusindex == 2)
-        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 3, "startaddress":  0, "type": "int16", "count": 10 }')
+        tasmota.cmd('modbussend { "deviceaddress": 1, "functioncode": 3, "startaddress":  0, "type": "int16", "count": 10 }')
     end
     if (sendmodbusindex == 3)
-        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  0, "type": "int16", "count": 13 }')
+        tasmota.cmd('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  0, "type": "int16", "count": 13 }')
     end
     if (sendmodbusindex == 4)
-        tasmota.cmd ('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  18, "type": "int16", "count":  7}')
+        tasmota.cmd('modbussend { "deviceaddress": 1, "functioncode": 4, "startaddress":  18, "type": "int16", "count":  7}')
         sendmodbusindex = 0
     else
         sendmodbusindex = sendmodbusindex + 1
