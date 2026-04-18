@@ -5,8 +5,8 @@
 # 3 = Cool Switch
 
 # Output List
-# 0 = Cool
-# 1 = Heat
+# 0 = Heat
+# 1 = Cool
 # 2 = DHW
 # 3 = Valve Livingroom
 # 4 = Valve Bathroom
@@ -25,6 +25,7 @@ class HeatPumpController
     var backupheater_temperature
     var boiler_temperature
     var water_pressure
+    var compressor_frequency
     var remote_stop
     var energy_state
     var emergency_stop_active
@@ -32,7 +33,6 @@ class HeatPumpController
     var modbus_queue
     var send_index
     var energy_state_map
-    var warmup_count
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -51,13 +51,13 @@ class HeatPumpController
         self.backupheater_temperature = nil
         self.boiler_temperature = nil
         self.water_pressure = nil
+        self.compressor_frequency = nil
         self.remote_stop = false
         self.energy_state = nil
         self.emergency_stop_active = false
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
-        self.warmup_count = 0
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -86,8 +86,8 @@ class HeatPumpController
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
-        self.control_loop()
-        self.modbus_loop()
+        tasmota.set_timer(10000, def () self.control_loop() end)
+        tasmota.set_timer(2000, def () self.modbus_loop() end)
     end
 
     # control_loop(): Evaluates logical conditions every 10 seconds.
@@ -98,12 +98,6 @@ class HeatPumpController
         var inputs = tasmota.get_switches()
         var outputs = tasmota.get_power()
         
-        if (self.warmup_count < 1)
-            self.warmup_count += 1
-            tasmota.log("HP-Ctrl: Warm-up - Waiting for stable inputs", 2)
-            return 
-        end
-
         if (!mqtt.connected() && (self.remote_stop != false || self.remote_heat_request != false))
             self.remote_stop = false
             self.remote_heat_request = false
@@ -160,20 +154,21 @@ class HeatPumpController
         elif (heat_pump_cooling) self.operation_mode = "Cooling"
         else self.operation_mode = "Idle" end
 
-        var pump_central_heating = (heat_pump_heating || heat_pump_cooling)
+        var waterpump_central_heating = (heat_pump_heating || heat_pump_cooling)
 
         # Apply Relay outputs
-        if (outputs[0] != heat_pump_cooling)      tasmota.set_power(0, heat_pump_cooling) end
-        if (outputs[1] != heat_pump_heating)      tasmota.set_power(1, heat_pump_heating) end
+        if (outputs[0] != heat_pump_heating)      tasmota.set_power(0, heat_pump_heating) end
+        if (outputs[1] != heat_pump_cooling)      tasmota.set_power(1, heat_pump_cooling) end
         if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
         if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
-        if (outputs[5] != pump_central_heating)   tasmota.set_power(5, pump_central_heating) end
+        if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
         if (outputs[6] != thermostat_hc_input)    tasmota.set_power(6, thermostat_hc_input) end
     end
 
     # modbus_loop(): Orchestrates Modbus traffic (polls registers or sends commands)
     def modbus_loop()
         tasmota.set_timer(2000, def () self.modbus_loop() end)
+
         if (size(self.modbus_queue) > 0)
             var command = self.modbus_queue.pop(0)
             tasmota.cmd("modbussend " + command)
@@ -223,6 +218,9 @@ class HeatPumpController
                     self.outside_temperature = val[12]
                     self.water_pressure = val[13]
                 end
+                if (fc == 4 && sa == 16 && size(val) >= 8)
+                    self.compressor_frequency = val[8]
+                end
             end
         end
     end
@@ -240,8 +238,7 @@ class HeatPumpController
         html += string.format("{s}Thermostat Living{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Thermostat Bath{m}%s{e}", self.switchinput_bathroom)
 
-        var display_mode = (self.warmup_count < 1) ? "Initializing..." : self.operation_mode
-        html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, display_mode)
+        html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
         
 
         # --- Temperatures & Sensors ---
@@ -251,6 +248,7 @@ class HeatPumpController
         if (self.backupheater_temperature != nil) html += string.format("{s}Backup Heater{m}%.1f °C{e}", self.backupheater_temperature * 0.1) end
         if (self.boiler_temperature != nil) html += string.format("{s}Boiler Temp{m}%.1f °C{e}", self.boiler_temperature * 0.1) end
         if (self.water_pressure != nil) html += string.format("{s}Water Pressure{m}%.1f bar{e}", self.water_pressure * 0.1) end
+        if (self.compressor_frequency != nil) html += string.format("{s}Compressor Frequency{m}%.d Hz{e}", self.compressor_frequency) end
         
         var state_text = (self.energy_state != nil && self.energy_state >= 0 && self.energy_state < size(self.energy_state_map)) ? self.energy_state_map[self.energy_state] : "Unknown"
         html += string.format("{s}Energy State{m}%s (%d){e}", state_text, self.energy_state)
