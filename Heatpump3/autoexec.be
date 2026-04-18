@@ -26,7 +26,6 @@ class HeatPumpController
     var boiler_temperature
     var water_pressure
     var compressor_frequency
-    var remote_stop
     var energy_state
     var emergency_stop_active
     var operation_mode
@@ -52,7 +51,6 @@ class HeatPumpController
         self.boiler_temperature = nil
         self.water_pressure = nil
         self.compressor_frequency = nil
-        self.remote_stop = false
         self.energy_state = nil
         self.emergency_stop_active = false
         self.operation_mode = "Idle"
@@ -77,10 +75,6 @@ class HeatPumpController
             self.remote_heat_request = (p == "1") 
         end)
 
-        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) 
-            self.remote_stop = (p == "1") 
-        end)
-
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/energystate", def (t, i, p) self.mqtt_energy_state(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/emergencystop", def (t, i, p) self.mqtt_emergency_stop(p) end)
         
@@ -98,8 +92,8 @@ class HeatPumpController
         var inputs = tasmota.get_switches()
         var outputs = tasmota.get_power()
         
-        if (!mqtt.connected() && (self.remote_stop != false || self.remote_heat_request != false))
-            self.remote_stop = false
+        if (!mqtt.connected())
+            self.emergency_stop = false
             self.remote_heat_request = false
         end
 
@@ -145,7 +139,7 @@ class HeatPumpController
             end
         end
 
-        if (self.remote_stop || self.emergency_stop_active)
+        if (self.emergency_stop_active)
             heat_pump_heating = false
             heat_pump_cooling = false
         end
