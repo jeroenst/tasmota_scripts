@@ -98,10 +98,10 @@ class HeatPumpController
         end
 
         # Read physical switch states
-        var thermostat_livingroom = (inputs[0] == 1)
-        var thermostat_bathroom   = (inputs[1] == 1)
-        var heating_mode_switch   = (inputs[2] == 1)
-        var cooling_mode_switch   = (inputs[3] == 1)
+        var thermostat_livingroom = inputs[0]
+        var thermostat_bathroom   = inputs[1]
+        var heating_mode_switch   = inputs[2]
+        var cooling_mode_switch   = inputs[3]
 
         # Update UI labels for switches
         self.switchinput_livingroom = thermostat_livingroom ? "On" : "Off"
