@@ -111,8 +111,8 @@ class HeatPumpController
         else self.switchinput_mode_selector = "Off" end
 
         # Temporary variables for logic
-        var heat_pump_heating = false
-        var heat_pump_cooling = false
+        var heatpump_heating = false
+        var heatpump_cooling = false
         var valve_livingroom = false
         var valve_bathroom = false
         var thermostat_hc_input = false
@@ -122,37 +122,37 @@ class HeatPumpController
             thermostat_hc_input = false 
             if (thermostat_livingroom) 
                 valve_livingroom = true
-                heat_pump_heating = true 
+                heatpump_heating = true 
             end
             if (thermostat_bathroom) 
                 valve_bathroom = true
-                heat_pump_heating = true 
+                heatpump_heating = true 
             end
             if (self.remote_heat_request) 
-                heat_pump_heating = true 
+                heatpump_heating = true 
             end
         elif (cooling_mode_switch)
             thermostat_hc_input = true 
             if (thermostat_livingroom) 
                 valve_livingroom = true
-                heat_pump_cooling = true 
+                heatpump_cooling = true 
             end
         end
 
         if (self.emergency_stop_active)
-            heat_pump_heating = false
-            heat_pump_cooling = false
+            heatpump_heating = false
+            heatpump_cooling = false
         end
 
-        if (heat_pump_heating) self.operation_mode = "Heating"
-        elif (heat_pump_cooling) self.operation_mode = "Cooling"
+        if (heatpump_heating) self.operation_mode = "Heating"
+        elif (heatpump_cooling) self.operation_mode = "Cooling"
         else self.operation_mode = "Idle" end
 
-        var waterpump_central_heating = (heat_pump_heating || heat_pump_cooling)
+        var waterpump_central_heating = (heatpump_heating || heatpump_cooling)
 
         # Apply Relay outputs
-        if (outputs[0] != heat_pump_heating)      tasmota.set_power(0, heat_pump_heating) end
-        if (outputs[1] != heat_pump_cooling)      tasmota.set_power(1, heat_pump_cooling) end
+        if (outputs[0] != heatpump_cooling)      tasmota.set_power(0, heatpump_cooling) end
+        if (outputs[1] != heatpump_heating)      tasmota.set_power(1, heatpump_heating) end
         if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
         if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
         if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
