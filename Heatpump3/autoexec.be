@@ -28,16 +28,17 @@ class HeatPumpController
     var compressor_frequency
     var energy_state
     var emergency_stop_active
+    var dhw_stop_active
     var operation_mode
     var modbus_queue
     var send_index
     var energy_state_map
+    var remote_heating_request
     
     # Store switch states for UI display
     var switchinput_livingroom
     var switchinput_bathroom
     var switchinput_mode_selector
-    var remote_heating_request
 
     # init(): Constructor equivalent in Tasmota Berry. 
     # Sets initial states, defines MQTT subscriptions, and launches cyclic timers.
@@ -54,9 +55,11 @@ class HeatPumpController
         self.compressor_frequency = nil
         self.energy_state = nil
         self.emergency_stop_active = false
+        self.dhw_stop_active = false
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
+        self.remote_heating_request = false
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -78,6 +81,7 @@ class HeatPumpController
 
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/energystate", def (t, i, p) self.mqtt_energy_state(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/emergencystop", def (t, i, p) self.mqtt_emergency_stop(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwstop", def (t, i, p) self.mqtt_dhw_stop(p) end)
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
@@ -94,7 +98,8 @@ class HeatPumpController
         var outputs = tasmota.get_power()
         
         if (!mqtt.connected())
-            self.emergency_stop = false
+            self.emergency_stop_active = false
+            self.dhw_stop_active = false
             self.remote_heat_request = false
         end
 
@@ -144,6 +149,10 @@ class HeatPumpController
         if (self.emergency_stop_active)
             heatpump_heating = false
             heatpump_cooling = false
+            heatpump_dhw = false
+        end
+
+        if (self.dhw_stop_active)
             heatpump_dhw = false
         end
 
@@ -199,6 +208,10 @@ class HeatPumpController
         end
     end
 
+    def mqtt_dhw_stop(payload)
+        self.dhw_stop_active = (payload == "1")
+    end
+
     # modbus_received(): Parses incoming Modbus JSON responses
     def modbus_received(data)
         if (data != nil && data['DeviceAddress'] == 1)
@@ -216,7 +229,7 @@ class HeatPumpController
                     self.outside_temperature = val[12]
                     self.water_pressure = val[13]
                 end
-                if (fc == 4 && sa == 16 && size(val) >= 8)
+                if (fc == 4 && sa == 16 && size(val) >= 9)
                     self.compressor_frequency = val[8]
                 end
             end
@@ -225,36 +238,38 @@ class HeatPumpController
 
     # web_sensor(): Injects HTML for real-time status display in the Web UI
     def web_sensor()
-        var html = ""
-        var mode_color = "white"
-        if (self.operation_mode == "Heating") mode_color = "#ffa500" end
-        if (self.operation_mode == "Cooling") mode_color = "#00aaff" end
+        var html = "<hr>"
+        var mode_color = (self.operation_mode == "Heating") ? "#ffa500" : ((self.operation_mode == "Cooling") ? "#00aaff" : "white")
         
-        # --- Physical Inputs Section ---
-        html += "<hr>"
         html += string.format("{s}Mode Selector{m}%s{e}", self.switchinput_mode_selector)
-        html += string.format("{s}Thermostat Living{m}%s{e}", self.switchinput_livingroom)
-        html += string.format("{s}Thermostat Bath{m}%s{e}", self.switchinput_bathroom)
-        html += string.format("{s}Remote Heat{m}%s{e}", self.remote_heat_request ? "On" : "Off")
-
+        html += string.format("{s}Thermostat Livingroom{m}%s{e}", self.switchinput_livingroom)
+        html += string.format("{s}Thermostat Bathroom{m}%s{e}", self.switchinput_bathroom)
+        html += string.format("{s}Remote Heat Request{m}%s{e}", self.remote_heat_request ? "On" : "Off")
         html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
-        
 
-        # --- Temperatures & Sensors ---
-        if (self.outside_temperature != nil) html += string.format("{s}Outside Temp{m}%.1f °C{e}", self.outside_temperature * 0.1) end
-        if (self.inlet_temperature != nil) html += string.format("{s}Inlet Temp{m}%.1f °C{e}", self.inlet_temperature * 0.1) end
-        if (self.outlet_temperature != nil) html += string.format("{s}Outlet Temp{m}%.1f °C{e}", self.outlet_temperature * 0.1) end
-        if (self.backupheater_temperature != nil) html += string.format("{s}Backup Heater{m}%.1f °C{e}", self.backupheater_temperature * 0.1) end
-        if (self.boiler_temperature != nil) html += string.format("{s}Boiler Temp{m}%.1f °C{e}", self.boiler_temperature * 0.1) end
-        if (self.water_pressure != nil) html += string.format("{s}Water Pressure{m}%.1f bar{e}", self.water_pressure * 0.1) end
-        if (self.compressor_frequency != nil) html += string.format("{s}Compressor Frequency{m}%.d Hz{e}", self.compressor_frequency) end
+        # Temperatures & Sensors with "-" fallback
+        html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
+        html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f", self.inlet_temperature * 0.1) : "-")
+        html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
+        html += string.format("{s}Boiler Temperature{m}%s{e}", self.boiler_temperature != nil ? string.format("%.1f °C", self.boiler_temperature * 0.1) : "-")
+        html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
+        html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
         
-        var state_text = (self.energy_state != nil && self.energy_state >= 0 && self.energy_state < size(self.energy_state_map)) ? self.energy_state_map[self.energy_state] : "Unknown"
-        html += string.format("{s}Energy State{m}%s (%d){e}", state_text, self.energy_state)
+        # Energy State
+        if (self.energy_state != nil)
+            var state_text = (self.energy_state >= 0 && self.energy_state < size(self.energy_state_map)) ? self.energy_state_map[self.energy_state] : "Unknown"
+            html += string.format("{s}Energy State{m}%s (%d){e}", state_text, self.energy_state)
+        else
+            html += "{s}Energy State{m}-{e}"
+        end
         
-        var em_style = (self.emergency_stop_active == true) ? "color:red;font-weight:bold" : ""
-        var em_label = self.emergency_stop_active == nil ? "Unknown" : (self.emergency_stop_active ? "ACTIVE" : "Inactive")
+        var em_style = (self.emergency_stop_active) ? "color:red;font-weight:bold" : ""
+        var em_label = (self.emergency_stop_active) ? "ACTIVE" : "Inactive"
         html += string.format("{s}Emergency Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
+
+        em_style = (self.dhw_stop_active) ? "color:red;font-weight:bold" : ""
+        em_label = (self.dhw_stop_active) ? "ACTIVE" : "Inactive"
+        html += string.format("{s}DHW Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
         
         tasmota.web_send_decimal(html)
     end
