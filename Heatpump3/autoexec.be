@@ -5,8 +5,8 @@
 # 3 = Cool Switch
 
 # Output List
-# 0 = Heat
-# 1 = Cool
+# 0 = Cool
+# 1 = Heat
 # 2 = DHW
 # 3 = Valve Livingroom
 # 4 = Valve Bathroom
@@ -37,6 +37,7 @@ class HeatPumpController
     var switchinput_livingroom
     var switchinput_bathroom
     var switchinput_mode_selector
+    var remote_heating_request
 
     # init(): Constructor equivalent in Tasmota Berry. 
     # Sets initial states, defines MQTT subscriptions, and launches cyclic timers.
@@ -113,6 +114,7 @@ class HeatPumpController
         # Temporary variables for logic
         var heatpump_heating = false
         var heatpump_cooling = false
+        var heatpump_dhw = true
         var valve_livingroom = false
         var valve_bathroom = false
         var thermostat_hc_input = false
@@ -142,6 +144,7 @@ class HeatPumpController
         if (self.emergency_stop_active)
             heatpump_heating = false
             heatpump_cooling = false
+            heatpump_dhw = false
         end
 
         if (heatpump_heating) self.operation_mode = "Heating"
@@ -153,6 +156,7 @@ class HeatPumpController
         # Apply Relay outputs
         if (outputs[0] != heatpump_cooling)      tasmota.set_power(0, heatpump_cooling) end
         if (outputs[1] != heatpump_heating)      tasmota.set_power(1, heatpump_heating) end
+        if (outputs[2] != heatpump_dhw)      tasmota.set_power(2, heatpump_dhw) end
         if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
         if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
         if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
@@ -231,6 +235,7 @@ class HeatPumpController
         html += string.format("{s}Mode Selector{m}%s{e}", self.switchinput_mode_selector)
         html += string.format("{s}Thermostat Living{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Thermostat Bath{m}%s{e}", self.switchinput_bathroom)
+        html += string.format("{s}Remote Heat{m}%s{e}", self.remote_heat_request ? "On" : "Off")
 
         html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
         
