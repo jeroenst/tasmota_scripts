@@ -35,6 +35,8 @@ class HeatPumpController
     var send_index
     var energy_state_map
     var remote_heating_request
+    var dhw_setpoint
+    var circuit1_shift
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -62,6 +64,8 @@ class HeatPumpController
         self.modbus_queue = []
         self.send_index = 0
         self.remote_heating_request = false
+        self.dhw_setpoint = nil
+        self.circuit1_shift = nil
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -244,7 +248,11 @@ class HeatPumpController
             var sa = data['StartAddress']
             var val = data['Values']
             if (val != nil)
-                if (fc == 3 && sa == 0 && size(val) >= 10) self.energy_state = val[9] end
+                if (fc == 3 && sa == 0 && size(val) >= 10)
+                    self.circuit1_shift = val[4]
+                    self.dhw_setpoint = val[8]
+                    self.energy_state = val[9]
+                end
                 if (fc == 4 && sa == 0 && size(val) >= 14)
                     self.inlet_temperature = val[2]
                     self.outlet_temperature = val[3]
@@ -280,6 +288,9 @@ class HeatPumpController
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
         html += string.format("{s}Water Flowrate{m}%s{e}", self.water_flowrate != nil ? string.format("%.1f l/min", self.water_flowrate * 0.1) : "-")
         html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
+
+        html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
+        html += string.format("{s}DHW Setpoint{m}%s{e}", self.dhw_setpoint != nil ? string.format("%d °C", self.dhw_setpoint * 0.1) : "-")
         
         # Energy State
         if (self.energy_state != nil)
