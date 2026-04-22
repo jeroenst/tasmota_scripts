@@ -25,9 +25,10 @@ class HeatPumpController
     var backupheater_temperature
     var boiler_temperature
     var water_pressure
+    var water_flowrate
     var compressor_frequency
     var energy_state
-    var emergency_stop_active
+    var remote_stop_active
     var dhw_stop_active
     var operation_mode
     var modbus_queue
@@ -52,9 +53,10 @@ class HeatPumpController
         self.backupheater_temperature = nil
         self.boiler_temperature = nil
         self.water_pressure = nil
+        self.water_flowrate = nil
         self.compressor_frequency = nil
         self.energy_state = nil
-        self.emergency_stop_active = false
+        self.remote_stop_active = false
         self.dhw_stop_active = false
         self.operation_mode = "Idle"
         self.modbus_queue = []
@@ -80,7 +82,10 @@ class HeatPumpController
         end)
 
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/energystate", def (t, i, p) self.mqtt_energy_state(p) end)
-        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/emergencystop", def (t, i, p) self.mqtt_emergency_stop(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwsetpoint", def (t, i, p) self.mqtt_dhw_setpoint(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_remote_stop(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwstop", def (t, i, p) self.mqtt_dhw_stop(p) end)
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
@@ -98,7 +103,7 @@ class HeatPumpController
         var outputs = tasmota.get_power()
         
         if (!mqtt.connected())
-            self.emergency_stop_active = false
+            self.remote_stop_active = false
             self.dhw_stop_active = false
             self.remote_heat_request = false
         end
@@ -146,7 +151,7 @@ class HeatPumpController
             end
         end
 
-        if (self.emergency_stop_active)
+        if (self.remote_stop_active)
             heatpump_heating = false
             heatpump_cooling = false
             heatpump_dhw = false
@@ -195,17 +200,37 @@ class HeatPumpController
     def mqtt_energy_state(payload)
         var value = int(payload)
         if (value >= 0 && value <= 8 && size(self.modbus_queue) < 10)
-            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 9, "values": [%d]}', value)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 9, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
-    def mqtt_emergency_stop(payload)
-        var state = (payload == "1") ? 1 : 0
-        if (size(self.modbus_queue) < 10)
-            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 4, "values": [%d]}', state)
+    def mqtt_circuit1_shift(payload)
+        var value = int(payload)
+        if (value >= -20 && value <= 20 && size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 4, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
+    end
+
+    def mqtt_dhw_setpoint(payload)
+        var value = int(payload)
+        if (value >= 0 && value <= 80 && size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 8, "type": "int16", "count": 1, "values": [%d]}', value)
+            self.modbus_queue.push(command)
+        end
+    end
+
+    def mqtt_silent_mode(payload)
+        var value = (payload == "1")
+        if (size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 2, "type": "bit", "count": 1, "values": [%d]}', value)
+            self.modbus_queue.push(command)
+        end
+    end
+
+    def mqtt_remote_stop(payload)
+        self.remote_stop_active = (payload == "1")
     end
 
     def mqtt_dhw_stop(payload)
@@ -219,13 +244,13 @@ class HeatPumpController
             var sa = data['StartAddress']
             var val = data['Values']
             if (val != nil)
-                if (fc == 1 && sa == 0 && size(val) >= 5) self.emergency_stop_active = (val[4] == 1) end
                 if (fc == 3 && sa == 0 && size(val) >= 10) self.energy_state = val[9] end
                 if (fc == 4 && sa == 0 && size(val) >= 14)
                     self.inlet_temperature = val[2]
                     self.outlet_temperature = val[3]
                     self.backupheater_temperature = val[4]
                     self.boiler_temperature = val[5]
+                    self.water_flowrate = val[8] != 50 ? val[8] : 0
                     self.outside_temperature = val[12]
                     self.water_pressure = val[13]
                 end
@@ -253,6 +278,7 @@ class HeatPumpController
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
         html += string.format("{s}Boiler Temperature{m}%s{e}", self.boiler_temperature != nil ? string.format("%.1f °C", self.boiler_temperature * 0.1) : "-")
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
+        html += string.format("{s}Water Flowrate{m}%s{e}", self.water_flowrate != nil ? string.format("%.1f l/min", self.water_flowrate * 0.1) : "-")
         html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
         
         # Energy State
@@ -263,9 +289,9 @@ class HeatPumpController
             html += "{s}Energy State{m}-{e}"
         end
         
-        var em_style = (self.emergency_stop_active) ? "color:red;font-weight:bold" : ""
-        var em_label = (self.emergency_stop_active) ? "ACTIVE" : "Inactive"
-        html += string.format("{s}Emergency Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
+        var em_style = (self.remote_stop_active) ? "color:red;font-weight:bold" : ""
+        var em_label = (self.remote_stop_active) ? "ACTIVE" : "Inactive"
+        html += string.format("{s}Remote Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
 
         em_style = (self.dhw_stop_active) ? "color:red;font-weight:bold" : ""
         em_label = (self.dhw_stop_active) ? "ACTIVE" : "Inactive"
