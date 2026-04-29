@@ -1,8 +1,8 @@
 # Input List
 # 0 = Thermostat Livingroom
 # 1 = Thermostat Bathroom
-# 2 = Heat Switch
-# 3 = Cool Switch
+# 6 = Heat Switch
+# 7 = Cool Switch
 
 # Output List
 # 0 = Cool
@@ -37,6 +37,7 @@ class HeatPumpController
     var remote_heating_request
     var dhw_setpoint
     var circuit1_shift
+    var output_power
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -66,6 +67,7 @@ class HeatPumpController
         self.remote_heating_request = false
         self.dhw_setpoint = nil
         self.circuit1_shift = nil
+        self.output_power = nil
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -115,8 +117,8 @@ class HeatPumpController
         # Read physical switch states
         var thermostat_livingroom = inputs[0]
         var thermostat_bathroom   = inputs[1]
-        var heating_mode_switch   = inputs[2]
-        var cooling_mode_switch   = inputs[3]
+        var heating_mode_switch   = inputs[6]
+        var cooling_mode_switch   = inputs[7]
 
         # Update UI labels for switches
         self.switchinput_livingroom = thermostat_livingroom ? "On" : "Off"
@@ -195,7 +197,8 @@ class HeatPumpController
             '{"deviceaddress": 1, "functioncode": 2, "startaddress": 0, "type": "bit", "count": 17}',
             '{"deviceaddress": 1, "functioncode": 3, "startaddress": 0, "type": "int16", "count": 10}',
             '{"deviceaddress": 1, "functioncode": 4, "startaddress": 0, "type": "int16", "count": 15}',
-            '{"deviceaddress": 1, "functioncode": 4, "startaddress": 16, "type": "int16", "count": 9}'
+            '{"deviceaddress": 1, "functioncode": 4, "startaddress": 16, "type": "int16", "count": 9}',
+            '{"deviceaddress": 1, "functioncode": 4, "startaddress": 34, "type": "int16", "count": 18}'
         ]
         tasmota.cmd("modbussend " + poll_commands[self.send_index])
         self.send_index = (self.send_index + 1) % size(poll_commands)
@@ -220,7 +223,7 @@ class HeatPumpController
     def mqtt_dhw_setpoint(payload)
         var value = int(payload)
         if (value >= 0 && value <= 80 && size(self.modbus_queue) < 10)
-            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 8, "type": "int16", "count": 1, "values": [%d]}', value)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 8, "type": "int16", "count": 1, "values": [%d]}', value * 10)
             self.modbus_queue.push(command)
         end
     end
@@ -265,6 +268,9 @@ class HeatPumpController
                 if (fc == 4 && sa == 16 && size(val) >= 9)
                     self.compressor_frequency = val[8]
                 end
+                if (fc == 4 && sa == 34 && size(val) >= 16)
+                    self.output_power = val[15]
+                end
             end
         end
     end
@@ -288,6 +294,7 @@ class HeatPumpController
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
         html += string.format("{s}Water Flowrate{m}%s{e}", self.water_flowrate != nil ? string.format("%.1f l/min", self.water_flowrate * 0.1) : "-")
         html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
+        html += string.format("{s}Output Power{m}%s{e}", self.output_power != nil ? string.format("%d W", self.output_power) : "-")
 
         html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
         html += string.format("{s}DHW Setpoint{m}%s{e}", self.dhw_setpoint != nil ? string.format("%d °C", self.dhw_setpoint * 0.1) : "-")
