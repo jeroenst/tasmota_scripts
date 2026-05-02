@@ -180,7 +180,7 @@ class HeatPumpController
         if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
         if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
         if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
-        if (outputs[6] != self.dhw_booster_on)   tasmota.set_power(5, self.dhw_booster_on) end
+        if (outputs[6] != self.dhw_booster_on)   tasmota.set_power(6, self.dhw_booster_on) end
     end
 
     # modbus_loop(): Orchestrates Modbus traffic (polls registers or sends commands)
