@@ -11,7 +11,7 @@
 # 3 = Valve Livingroom
 # 4 = Valve Bathroom
 # 5 = Pump CH
-# 6 = Heat/Cool input Thermostat
+# 6 = Booster
 
 import mqtt
 import string
@@ -38,6 +38,7 @@ class HeatPumpController
     var dhw_setpoint
     var circuit1_shift
     var output_power
+    var dhw_booster_on
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -61,6 +62,7 @@ class HeatPumpController
         self.energy_state = nil
         self.remote_stop_active = false
         self.dhw_stop_active = false
+        self.dhw_booster_on = false
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
@@ -93,6 +95,7 @@ class HeatPumpController
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_remote_stop(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwstop", def (t, i, p) self.mqtt_dhw_stop(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwboosteron", def (t, i, p) self.mqtt_dhw_booster_on(p) end)
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
@@ -177,6 +180,7 @@ class HeatPumpController
         if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
         if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
         if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
+        if (outputs[6] != self.dhw_booster_on)   tasmota.set_power(5, self.dhw_booster_on) end
     end
 
     # modbus_loop(): Orchestrates Modbus traffic (polls registers or sends commands)
@@ -240,6 +244,10 @@ class HeatPumpController
         self.dhw_stop_active = (payload == "1")
     end
 
+    def mqtt_dhw_booster_on(payload)
+        self.dhw_booster_on = (payload == "1")
+    end
+
     # modbus_received(): Parses incoming Modbus JSON responses
     def modbus_received(data)
         if (data != nil && data['DeviceAddress'] == 1)
@@ -280,6 +288,7 @@ class HeatPumpController
         html += string.format("{s}Thermostat Livingroom{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Thermostat Bathroom{m}%s{e}", self.switchinput_bathroom)
         html += string.format("{s}Remote Heat Request{m}%s{e}", self.remote_heat_request ? "On" : "Off")
+        html += string.format("{s}Remote DHW Booster{m}%s{e}", self.dhw_booster_on ? "On" : "Off")
         html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
 
         # Temperatures & Sensors with "-" fallback
