@@ -17,7 +17,7 @@ import mqtt
 import string
 import json
 
-class HeatPumpController
+class HeatPumpController : Driver
     var remote_heat_request
     var outside_temperature
     var inlet_temperature
@@ -39,6 +39,7 @@ class HeatPumpController
     var circuit1_shift
     var output_power
     var dhw_booster_on
+    var pump_run
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -70,6 +71,7 @@ class HeatPumpController
         self.dhw_setpoint = nil
         self.circuit1_shift = nil
         self.output_power = nil
+        self.pump_run = false
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -85,10 +87,7 @@ class HeatPumpController
         ]
 
         # MQTT Subscriptions
-        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/heatrequest", def (t, i, p) 
-            self.remote_heat_request = (p == "1") 
-        end)
-
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/heatrequest", def (t, i, p) self.remote_heat_request = (p == "1") end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/energystate", def (t, i, p) self.mqtt_energy_state(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwsetpoint", def (t, i, p) self.mqtt_dhw_setpoint(p) end)
@@ -101,6 +100,7 @@ class HeatPumpController
         
         tasmota.set_timer(10000, def () self.control_loop() end)
         tasmota.set_timer(2000, def () self.modbus_loop() end)
+        self.run_pump()
     end
 
     # control_loop(): Evaluates logical conditions every 10 seconds.
@@ -112,8 +112,8 @@ class HeatPumpController
         var outputs = tasmota.get_power()
         
         if (!mqtt.connected())
-            self.remote_stop_active = false
-            self.dhw_stop_active = false
+            self.mqtt_remote_stop(0)
+            self.mqtt_dhw_stop(0)
             self.remote_heat_request = false
         end
 
@@ -171,7 +171,9 @@ class HeatPumpController
         elif (heatpump_cooling) self.operation_mode = "Cooling"
         else self.operation_mode = "Idle" end
 
-        var waterpump_central_heating = (heatpump_heating || heatpump_cooling)
+        var waterpump_central_heating = (heatpump_heating || heatpump_cooling || self.pump_run)
+        valve_livingroom = valve_livingroom || self.pump_run
+        valve_bathroom = valve_bathroom || self.pump_run
 
         # Apply Relay outputs
         if (outputs[0] != heatpump_cooling)      tasmota.set_power(0, heatpump_cooling) end
@@ -229,23 +231,29 @@ class HeatPumpController
     end
 
     def mqtt_silent_mode(payload)
-        var value = (payload == "1")
+        var value = int(payload) == 1
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 2, "type": "bit", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
+
     def mqtt_remote_stop(payload)
-        self.remote_stop_active = (payload == "1")
+        var value = int(payload) == 1
+        self.remote_stop_active = value
+        if (size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 5, "type": "bit", "count": 1, "values": [%d]}', value)
+            self.modbus_queue.push(command)
+        end
     end
 
     def mqtt_dhw_stop(payload)
-        self.dhw_stop_active = (payload == "1")
+        self.dhw_stop_active = (int(payload) == 1)
     end
 
     def mqtt_dhw_booster_on(payload)
-        self.dhw_booster_on = (payload == "1")
+        self.dhw_booster_on = (int(payload) == 1)
     end
 
     # modbus_received(): Parses incoming Modbus JSON responses
@@ -293,7 +301,7 @@ class HeatPumpController
 
         # Temperatures & Sensors with "-" fallback
         html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
-        html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f", self.inlet_temperature * 0.1) : "-")
+        html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f °C", self.inlet_temperature * 0.1) : "-")
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
         html += string.format("{s}Boiler Temperature{m}%s{e}", self.boiler_temperature != nil ? string.format("%.1f °C", self.boiler_temperature * 0.1) : "-")
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
@@ -321,6 +329,17 @@ class HeatPumpController
         html += string.format("{s}DHW Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
         
         tasmota.web_send_decimal(html)
+    end
+
+    # run_pump enables the pump once a day to prevent them getting stuck
+    def run_pump()
+        if (self.pump_run)
+            tasmota.set_timer(86400000, def () self.run_pump() end)
+            self.pump_run = false
+        else
+            tasmota.set_timer(30000, def () self.run_pump() end)
+            self.pump_run = true
+        end
     end
 end
 
