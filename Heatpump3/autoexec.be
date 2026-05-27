@@ -40,6 +40,7 @@ class HeatPumpController : Driver
     var output_power
     var dhw_booster_on
     var pump_run
+    var mqtt_connected_old
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -72,6 +73,7 @@ class HeatPumpController : Driver
         self.circuit1_shift = nil
         self.output_power = nil
         self.pump_run = false
+        self.mqtt_connected_old = false
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -99,7 +101,7 @@ class HeatPumpController : Driver
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
         tasmota.set_timer(10000, def () self.control_loop() end)
-        tasmota.set_timer(2000, def () self.modbus_loop() end)
+        tasmota.set_timer(1000, def () self.modbus_loop() end)
         self.run_pump()
     end
 
@@ -111,12 +113,15 @@ class HeatPumpController : Driver
         var inputs = tasmota.get_switches()
         var outputs = tasmota.get_power()
         
-        if (!mqtt.connected())
-            self.mqtt_remote_stop(0)
-            self.mqtt_dhw_stop(0)
-            self.remote_heat_request = false
+        if (!mqtt.connected() && self.mqtt_connected_old)
+          # After 10 minutes of disconnection from mqtt call mqtt_disconnect_timer
+          tasmota.set_timer(600000, def () self.mqtt_disconnect_timer() end, 1)
         end
-
+        if (mqtt.connected  && !self.mqtt_connected_old)
+          tasmota.remove_timer(1)
+        end
+        self.mqtt_connected_old = mqtt.connected()
+        
         # Read physical switch states
         var thermostat_livingroom = inputs[0]
         var thermostat_bathroom   = inputs[1]
@@ -340,6 +345,15 @@ class HeatPumpController : Driver
             tasmota.set_timer(30000, def () self.run_pump() end)
             self.pump_run = true
         end
+    end
+    
+    def mqtt_disconnected_timer()
+        if (!mqtt.connected())
+            self.mqtt_remote_stop(0)
+            self.mqtt_dhw_stop(0)
+            self.remote_heat_request = false
+            self.mqtt_energy_state(2)
+        end    
     end
 end
 
