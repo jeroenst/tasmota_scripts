@@ -41,6 +41,7 @@ class HeatPumpController : Driver
     var dhw_booster_on
     var pump_run
     var mqtt_connected_old
+    var circuit1_setpoint
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -74,6 +75,7 @@ class HeatPumpController : Driver
         self.output_power = nil
         self.pump_run = false
         self.mqtt_connected_old = false
+        self.circuit1_setpoint = nil
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -269,6 +271,7 @@ class HeatPumpController : Driver
             var val = data['Values']
             if (val != nil)
                 if (fc == 3 && sa == 0 && size(val) >= 10)
+                    self.circuit1_setpoint = val[2]
                     self.circuit1_shift = val[4]
                     self.dhw_setpoint = val[8]
                     self.energy_state = val[9]
@@ -305,17 +308,18 @@ class HeatPumpController : Driver
         html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
 
         # Temperatures & Sensors with "-" fallback
-        html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
+        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%d °C", self.circuit1_setpoint * 0.1) : "-")
+        html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
         html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f °C", self.inlet_temperature * 0.1) : "-")
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
+        html += string.format("{s}DHW Setpoint{m}%s{e}", self.dhw_setpoint != nil ? string.format("%d °C", self.dhw_setpoint * 0.1) : "-")
         html += string.format("{s}Boiler Temperature{m}%s{e}", self.boiler_temperature != nil ? string.format("%.1f °C", self.boiler_temperature * 0.1) : "-")
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
         html += string.format("{s}Water Flowrate{m}%s{e}", self.water_flowrate != nil ? string.format("%.1f l/min", self.water_flowrate * 0.1) : "-")
         html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
         html += string.format("{s}Output Power{m}%s{e}", self.output_power != nil ? string.format("%d W", self.output_power) : "-")
+        html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
 
-        html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
-        html += string.format("{s}DHW Setpoint{m}%s{e}", self.dhw_setpoint != nil ? string.format("%d °C", self.dhw_setpoint * 0.1) : "-")
         
         # Energy State
         if (self.energy_state != nil)
