@@ -28,8 +28,9 @@ class HeatPumpController : Driver
     var water_flowrate
     var compressor_frequency
     var energy_state
-    var remote_stop_active
+    var emergency_stop_active
     var dhw_stop_active
+    var remote_heatcool_mode
     var operation_mode
     var modbus_queue
     var send_index
@@ -63,9 +64,10 @@ class HeatPumpController : Driver
         self.water_flowrate = nil
         self.compressor_frequency = nil
         self.energy_state = nil
-        self.remote_stop_active = false
+        self.emergency_stop_active = false
         self.dhw_stop_active = false
         self.dhw_booster_on = false
+        self.remote_heatcool_mode = "switch"
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
@@ -96,8 +98,9 @@ class HeatPumpController : Driver
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwsetpoint", def (t, i, p) self.mqtt_dhw_setpoint(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
-        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_remote_stop(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_emergency_stop(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwstop", def (t, i, p) self.mqtt_dhw_stop(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/heatcoolmode", def (t, i, p) self.mqtt_heatcool_mode(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwboosteron", def (t, i, p) self.mqtt_dhw_booster_on(p) end)
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
@@ -143,6 +146,17 @@ class HeatPumpController : Driver
         var heatpump_dhw = true
         var valve_livingroom = false
         var valve_bathroom = false
+        
+        if (self.remote_heatcool_mode == "cool") 
+           heating_mode_switch = 0
+           cooling_mode_switch = 1
+        elif (self.remote_heatcool_mode == "heat")
+           heating_mode_switch = 1
+           cooling_mode_switch = 0
+        elif (self.remote_heatcool_mode == "stop")
+           heating_mode_switch = 0
+           cooling_mode_switch = 0
+        end
 
         # Main logic based on the 3-way switch
         if (heating_mode_switch)
@@ -164,7 +178,7 @@ class HeatPumpController : Driver
             end
         end
 
-        if (self.remote_stop_active)
+        if (self.emergency_stop_active)
             heatpump_heating = false
             heatpump_cooling = false
             heatpump_dhw = false
@@ -246,9 +260,9 @@ class HeatPumpController : Driver
     end
 
 
-    def mqtt_remote_stop(payload)
+    def mqtt_emergency_stop(payload)
         var value = int(payload) == 1
-        self.remote_stop_active = value
+        self.emergency_stop_active = value
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 5, "type": "bit", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
@@ -261,6 +275,21 @@ class HeatPumpController : Driver
 
     def mqtt_dhw_booster_on(payload)
         self.dhw_booster_on = (int(payload) == 1)
+    end
+
+    def mqtt_heatcool_mode(payload)
+        if (payload == "cool") 
+          self.remote_heatcool_mode = "cool"
+        end
+        if (payload == "heat")
+          self.remote_heatcool_mode = "heat"
+        end
+        if (payload == "stop")
+          self.remote_heatcool_mode = "stop"
+        end
+        if (payload == "switch")
+          self.remote_heatcool_mode = "switch"
+        end
     end
 
     # modbus_received(): Parses incoming Modbus JSON responses
@@ -300,12 +329,33 @@ class HeatPumpController : Driver
         var html = "<hr>"
         var mode_color = (self.operation_mode == "Heating") ? "#ffa500" : ((self.operation_mode == "Cooling") ? "#00aaff" : "white")
         
-        html += string.format("{s}Mode Selector{m}%s{e}", self.switchinput_mode_selector)
+        html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
+
+        html += string.format("{s}Mode Switch{m}%s{e}", self.switchinput_mode_selector)
         html += string.format("{s}Thermostat Livingroom{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Thermostat Bathroom{m}%s{e}", self.switchinput_bathroom)
         html += string.format("{s}Remote Heat Request{m}%s{e}", self.remote_heat_request ? "On" : "Off")
         html += string.format("{s}Remote DHW Booster{m}%s{e}", self.dhw_booster_on ? "On" : "Off")
-        html += string.format("{s}Operation Mode{m}<span style='color:%s;font-weight:bold'>%s</span>{e}", mode_color, self.operation_mode)
+        
+        # Energy State
+        if (self.energy_state != nil)
+            var state_text = (self.energy_state >= 0 && self.energy_state < size(self.energy_state_map)) ? self.energy_state_map[self.energy_state] : "Unknown"
+            html += string.format("{s}Energy State{m}%s (%d){e}", state_text, self.energy_state)
+        else
+            html += "{s}Energy State{m}-{e}"
+        end
+        
+        var em_style = (self.emergency_stop_active) ? "color:red;font-weight:bold" : ""
+        var em_label = (self.emergency_stop_active) ? "ACTIVE" : "Inactive"
+        html += string.format("{s}Emergency Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
+
+        em_style = (self.dhw_stop_active) ? "color:red;font-weight:bold" : ""
+        em_label = (self.dhw_stop_active) ? "ACTIVE" : "Inactive"
+        html += string.format("{s}DHW Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
+        
+        mode_color = (self.remote_heatcool_mode == "stop") ? "red" : (self.remote_heatcool_mode == "heat") ? "#ffa500" : ((self.remote_heatcool_mode == "cool") ? "#00aaff" : "white")
+        em_style = (mode_color != "white") ? "color:" + mode_color + ";font-weight:bold" : ""
+        html += string.format("{s}Remote Heat/Cool Mode{m}<span style='%s'>%s</span>{e}", em_style, self.remote_heatcool_mode)
 
         # Temperatures & Sensors with "-" fallback
         html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%d °C", self.circuit1_setpoint * 0.1) : "-")
@@ -320,23 +370,6 @@ class HeatPumpController : Driver
         html += string.format("{s}Output Power{m}%s{e}", self.output_power != nil ? string.format("%d W", self.output_power) : "-")
         html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
 
-        
-        # Energy State
-        if (self.energy_state != nil)
-            var state_text = (self.energy_state >= 0 && self.energy_state < size(self.energy_state_map)) ? self.energy_state_map[self.energy_state] : "Unknown"
-            html += string.format("{s}Energy State{m}%s (%d){e}", state_text, self.energy_state)
-        else
-            html += "{s}Energy State{m}-{e}"
-        end
-        
-        var em_style = (self.remote_stop_active) ? "color:red;font-weight:bold" : ""
-        var em_label = (self.remote_stop_active) ? "ACTIVE" : "Inactive"
-        html += string.format("{s}Remote Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
-
-        em_style = (self.dhw_stop_active) ? "color:red;font-weight:bold" : ""
-        em_label = (self.dhw_stop_active) ? "ACTIVE" : "Inactive"
-        html += string.format("{s}DHW Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
-        
         tasmota.web_send_decimal(html)
     end
 
@@ -353,8 +386,9 @@ class HeatPumpController : Driver
     
     def mqtt_disconnected_timer()
         if (!mqtt.connected())
-            self.mqtt_remote_stop(0)
+            self.mqtt_emergency_stop(0)
             self.mqtt_dhw_stop(0)
+            self.mqtt_heatcool_mode("switch")
             self.remote_heat_request = false
             self.mqtt_energy_state(2)
         end    
