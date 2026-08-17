@@ -50,7 +50,6 @@ class HeatPumpController : Driver
         self.compressor_frequency = nil
         self.energy_state = nil
         self.emergency_stop_active = false
-        self.remote_heat_mode = "switch"
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
@@ -78,7 +77,6 @@ class HeatPumpController : Driver
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_emergency_stop(p) end)
-        mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/heatmode", def (t, i, p) self.mqtt_heat_mode(p) end)
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
@@ -112,11 +110,9 @@ class HeatPumpController : Driver
 
         # Temporary variables for logic
         var heatpump_heating = false
-        var valve_livingroom = false
         
-        # If thermostat livingroom is on, start heating
-        if (thermostat_livingroom) 
-            valve_livingroom = true
+        # If thermostat livingroom is on or remote heat request is active, start heating
+        if (thermostat_livingroom || self.remote_heat_request)
             heatpump_heating = true 
         end
 
@@ -188,18 +184,6 @@ class HeatPumpController : Driver
         end
     end
 
-    def mqtt_heat_mode(payload)
-        if (payload == "heat")
-          self.remote_heat_mode = "heat"
-        end
-        if (payload == "stop")
-          self.remote_heat_mode = "stop"
-        end
-        if (payload == "switch")
-          self.remote_heat_mode = "switch"
-        end
-    end
-
     # modbus_received(): Parses incoming Modbus JSON responses
     def modbus_received(data)
         if (data != nil && data['DeviceAddress'] == 1)
@@ -251,10 +235,6 @@ class HeatPumpController : Driver
         var em_style = (self.emergency_stop_active) ? "color:red;font-weight:bold" : ""
         var em_label = (self.emergency_stop_active) ? "ACTIVE" : "Inactive"
         html += string.format("{s}Emergency Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
-
-        mode_color = (self.remote_heat_mode == "stop") ? "red" : (self.remote_heat_mode == "heat") ? "#ffa500" : "white"
-        em_style = (mode_color != "white") ? "color:" + mode_color + ";font-weight:bold" : ""
-        html += string.format("{s}Remote Heat Mode{m}<span style='%s'>%s</span>{e}", em_style, self.remote_heat_mode)
 
         # Temperatures & Sensors with "-" fallback
         html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%d °C", self.circuit1_setpoint * 0.1) : "-")
