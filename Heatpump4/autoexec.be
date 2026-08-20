@@ -31,6 +31,7 @@ class HeatPumpController : Driver
     var pump_run
     var mqtt_connected_old
     var circuit1_setpoint
+    var lowwatertemp_heating
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -59,6 +60,7 @@ class HeatPumpController : Driver
         self.pump_run = false
         self.mqtt_connected_old = false
         self.circuit1_setpoint = nil
+        self.lowwatertemp_heating = false
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -124,6 +126,22 @@ class HeatPumpController : Driver
         else self.operation_mode = "Idle" end
 
         var waterpump_central_heating = (heatpump_heating || self.pump_run)
+
+        # To prevent to low water temperature preventing defrost during low outside temperature
+        # start heating when inlettemperature is < 18 if the water is still warm enough the heatpump wil not start
+        # this overrides emergency stop because a stop could create an emergency
+        if (self.inlet_temperature < 18 && self.outside_temperature < 10)
+            self.lowwatertemp_heating = true
+        end
+
+        if (self.inlet_temperature > 30) 
+            self.lowwatertemp_heating = false
+        end
+
+        if (self.lowwatertemp_heating)
+            heatpump_heating = true
+            waterpump_central_heating = false
+        end
 
         # Apply Relay outputs
         if (outputs[0] != heatpump_heating) tasmota.set_power(0, heatpump_heating) end
@@ -223,6 +241,7 @@ class HeatPumpController : Driver
 
         html += string.format("{s}Thermostat Livingroom{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Remote Heat Request{m}%s{e}", self.remote_heat_request ? "On" : "Off")
+        html += string.format("{s}Low Water Temp Heat Request{m}%s{e}", self.lowwatertemp_heating ? "On" : "Off")
         
         # Energy State
         if (self.energy_state != nil)
