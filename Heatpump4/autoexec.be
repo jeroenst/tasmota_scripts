@@ -79,6 +79,7 @@ class HeatPumpController : Driver
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
         mqtt.subscribe("0002/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_emergency_stop(p) end)
+        ###
         
         tasmota.add_rule("ModbusReceived", def (value) self.modbus_received(value) end)
         
@@ -106,17 +107,21 @@ class HeatPumpController : Driver
         
         # Read physical switch states
         var thermostat_livingroom = inputs[0]
+        ###
 
         # Update UI labels for switches
         self.switchinput_livingroom = thermostat_livingroom ? "On" : "Off"
+        ###
 
         # Temporary variables for logic
         var heatpump_heating = false
-        
+        ###
+
         # If thermostat livingroom is on or remote heat request is active, start heating
         if (thermostat_livingroom || self.remote_heat_request)
             heatpump_heating = true 
         end
+        ###
 
         if (self.emergency_stop_active)
             heatpump_heating = false
@@ -142,10 +147,12 @@ class HeatPumpController : Driver
             heatpump_heating = true
             waterpump_central_heating = false
         end
+        ###
 
         # Apply Relay outputs
         if (outputs[0] != heatpump_heating) tasmota.set_power(0, heatpump_heating) end
         if (outputs[1] != waterpump_central_heating) tasmota.set_power(1, waterpump_central_heating) end
+        ###
     end
 
     # modbus_loop(): Orchestrates Modbus traffic (polls registers or sends commands)
@@ -256,7 +263,7 @@ class HeatPumpController : Driver
         html += string.format("{s}Emergency Stop{m}<span style='%s'>%s</span>{e}", em_style, em_label)
 
         # Temperatures & Sensors with "-" fallback
-        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%d °C", self.circuit1_setpoint * 0.1) : "-")
+        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%.1f °C", self.circuit1_setpoint * 0.1) : "-")
         html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
         html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f °C", self.inlet_temperature * 0.1) : "-")
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")

@@ -205,7 +205,7 @@ class HeatPumpController : Driver
             self.lowwatertemp_heating = true
         end
 
-        if (self.inlet_temperature > 30) 
+        if (self.inlet_temperature > 25) 
             self.lowwatertemp_heating = false
         end
 
@@ -381,7 +381,7 @@ class HeatPumpController : Driver
         html += string.format("{s}Remote Heat/Cool Mode{m}<span style='%s'>%s</span>{e}", em_style, self.remote_heatcool_mode)
 
         # Temperatures & Sensors with "-" fallback
-        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%d °C", self.circuit1_setpoint * 0.1) : "-")
+        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%.1f °C", self.circuit1_setpoint * 0.1) : "-")
         html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
         html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f °C", self.inlet_temperature * 0.1) : "-")
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
