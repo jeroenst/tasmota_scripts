@@ -34,13 +34,11 @@ class HeatPumpController : Driver
     var modbus_queue
     var send_index
     var energy_state_map
-    var remote_heating_request
     var circuit1_shift
     var output_power
     var pump_run
     var mqtt_connected_old
     var circuit1_setpoint
-    var lowwatertemp_heating
     var dhw_setpoint
     
     # Store switch states for UI display
@@ -72,7 +70,6 @@ class HeatPumpController : Driver
         self.pump_run = false
         self.mqtt_connected_old = false
         self.circuit1_setpoint = nil
-        self.lowwatertemp_heating = false
         self.dhw_setpoint = nil
         
         # Initialize UI switch labels
@@ -115,7 +112,7 @@ class HeatPumpController : Driver
           # After 10 minutes of disconnection from mqtt call mqtt_disconnect_timer
           tasmota.set_timer(600000, def () self.mqtt_disconnect_timer() end, 1)
         end
-        if (mqtt.connected  && !self.mqtt_connected_old)
+        if (mqtt.connected()  && !self.mqtt_connected_old)
           tasmota.remove_timer(1)
         end
         self.mqtt_connected_old = mqtt.connected()
@@ -162,8 +159,8 @@ class HeatPumpController : Driver
                 if (thermostat_livingroom) 
                     valve_livingroom = true
                     heatpump_heating = true 
-                    if (thermostat_kitchen) 
                 end
+                if (thermostat_kitchen) 
                     valve_kitchen = true
                     heatpump_heating = true 
                 end
@@ -203,25 +200,7 @@ class HeatPumpController : Driver
 
         if (heatpump_heating) self.operation_mode = "Heating"
         elif (heatpump_cooling) self.operation_mode = "Cooling"
-        else self.operation_mode = "Idle" end
-
-        # To prevent to low water temperature preventing defrost during low outside temperature
-        # start heating when inlettemperature is < 18 if the water is still warm enough the heatpump wil not start
-        # this overrides emergency stop because a stop could create an emergency
-        if (self.inlet_temperature < 18 && self.outside_temperature < 10)
-            self.lowwatertemp_heating = true
-        end
-
-        if (self.inlet_temperature > 25) 
-            self.lowwatertemp_heating = false
-        end
-
-        if (self.lowwatertemp_heating)
-            heatpump_heating = true
-            heatpump_cooling = false
-            valve_livingroom = false
-            valve_kitchen = false
-            valve_appartment = false
+        else self.operation_mode = "Idle"
         end
 
         if (heatpump_gas_request)
@@ -330,7 +309,6 @@ class HeatPumpController : Driver
         html += string.format("{s}Thermostat Livingroom{m}%s{e}", self.switchinput_livingroom)
         html += string.format("{s}Thermostat Kitchen{m}%s{e}", self.switchinput_kitchen)
         html += string.format("{s}Thermostat Appartment{m}%s{e}", self.switchinput_appartment)
-        html += string.format("{s}Low Water Temp Heat Request{m}%s{e}", self.lowwatertemp_heating ? "On" : "Off")
         
         # Energy State
         if (self.energy_state != nil)
@@ -363,12 +341,9 @@ class HeatPumpController : Driver
         end
     end
     
-    def mqtt_disconnected_timer()
+    def mqtt_disconnect_timer()
         if (!mqtt.connected())
-            self.mqtt_emergency_stop(0)
-            self.mqtt_dhw_stop(0)
-            self.mqtt_heatcool_mode("switch")
-            self.remote_heat_request = false
+            self.mqtt_remote_stop(0)
             self.mqtt_energy_state(2)
         end    
     end
