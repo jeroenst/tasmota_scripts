@@ -20,12 +20,10 @@ class HeatPumpController : Driver
     var compressor_frequency
     var energy_state
     var emergency_stop_active
-    var remote_heat_mode
     var operation_mode
     var modbus_queue
     var send_index
     var energy_state_map
-    var remote_heating_request
     var circuit1_shift
     var output_power
     var pump_run
@@ -54,7 +52,6 @@ class HeatPumpController : Driver
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
-        self.remote_heating_request = false
         self.circuit1_shift = nil
         self.output_power = nil
         self.pump_run = false
@@ -100,7 +97,7 @@ class HeatPumpController : Driver
           # After 10 minutes of disconnection from mqtt call mqtt_disconnect_timer
           tasmota.set_timer(600000, def () self.mqtt_disconnect_timer() end, 1)
         end
-        if (mqtt.connected  && !self.mqtt_connected_old)
+        if (mqtt.connected()  && !self.mqtt_connected_old)
           tasmota.remove_timer(1)
         end
         self.mqtt_connected_old = mqtt.connected()
@@ -127,19 +124,19 @@ class HeatPumpController : Driver
             heatpump_heating = false
         end
 
-        if (heatpump_heating) self.operation_mode = "Heating"
-        else self.operation_mode = "Idle" end
-
         var waterpump_central_heating = (heatpump_heating || self.pump_run)
 
         # To prevent to low water temperature preventing defrost during low outside temperature
         # start heating when inlettemperature is < 18 if the water is still warm enough the heatpump wil not start
         # this overrides emergency stop because a stop could create an emergency
-        if (self.inlet_temperature < 18 && self.outside_temperature < 10)
+        if (self.inlet_temperature != nil &&
+            self.outside_temperature != nil &&
+            self.inlet_temperature < 180 &&
+            self.outside_temperature < 100)
             self.lowwatertemp_heating = true
         end
 
-        if (self.inlet_temperature > 30) 
+        if (self.inlet_temperature != nil && self.inlet_temperature > 250)
             self.lowwatertemp_heating = false
         end
 
@@ -148,6 +145,9 @@ class HeatPumpController : Driver
             waterpump_central_heating = false
         end
         ###
+
+        if (heatpump_heating) self.operation_mode = "Heating"
+        else self.operation_mode = "Idle" end
 
         # Apply Relay outputs
         if (outputs[0] != heatpump_heating) tasmota.set_power(0, heatpump_heating) end
@@ -177,23 +177,23 @@ class HeatPumpController : Driver
     end
 
     def mqtt_energy_state(payload)
-        var value = int(payload)
-        if (value >= 0 && value <= 8 && size(self.modbus_queue) < 10)
+        var value = int(number(payload))
+        if (value != nil && value >= 0 && value <= 8 && size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 9, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
     def mqtt_circuit1_shift(payload)
-        var value = int(payload)
-        if (value >= -20 && value <= 20 && size(self.modbus_queue) < 10)
+        var value = int(number(payload))
+        if (value != nil && value >= -20 && value <= 20 && size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 4, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
     def mqtt_silent_mode(payload)
-        var value = int(payload) == 1
+        var value = int(number(payload)) == 1
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 2, "type": "bit", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
@@ -201,7 +201,7 @@ class HeatPumpController : Driver
     end
 
     def mqtt_emergency_stop(payload)
-        var value = int(payload) == 1
+        var value = int(number(payload)) == 1
         self.emergency_stop_active = value
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 5, "type": "bit", "count": 1, "values": [%d]}', value)
@@ -211,6 +211,10 @@ class HeatPumpController : Driver
 
     # modbus_received(): Parses incoming Modbus JSON responses
     def modbus_received(data)
+        if (type(data) == "string")
+            data = json.load(data)
+        end
+
         if (data != nil && data['DeviceAddress'] == 1)
             var fc = data['FunctionCode']
             var sa = data['StartAddress']
@@ -289,10 +293,9 @@ class HeatPumpController : Driver
     
     def mqtt_disconnected_timer()
         if (!mqtt.connected())
-            self.mqtt_emergency_stop(0)
-            self.mqtt_heat_mode("switch")
+            self.mqtt_emergency_stop("0")
             self.remote_heat_request = false
-            self.mqtt_energy_state(2)
+            self.mqtt_energy_state("2")
         end    
     end
 end
