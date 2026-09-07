@@ -35,7 +35,6 @@ class HeatPumpController : Driver
     var modbus_queue
     var send_index
     var energy_state_map
-    var remote_heating_request
     var dhw_setpoint
     var circuit1_shift
     var output_power
@@ -44,7 +43,10 @@ class HeatPumpController : Driver
     var mqtt_connected_old
     var circuit1_setpoint
     var lowwatertemp_heating
-    
+    var dhw_heating_active
+    var desinfection_active
+    var boiler_bottom_temperature
+
     # Store switch states for UI display
     var switchinput_livingroom
     var switchinput_bathroom
@@ -72,7 +74,6 @@ class HeatPumpController : Driver
         self.operation_mode = "Idle"
         self.modbus_queue = []
         self.send_index = 0
-        self.remote_heating_request = false
         self.dhw_setpoint = nil
         self.circuit1_shift = nil
         self.output_power = nil
@@ -80,7 +81,10 @@ class HeatPumpController : Driver
         self.mqtt_connected_old = false
         self.circuit1_setpoint = nil
         self.lowwatertemp_heating = false
-        
+        self.dhw_heating_active = nil
+        self.desinfection_active = nil
+        self.boiler_bottom_temperature = nil
+
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
         self.switchinput_bathroom = "Off"
@@ -99,6 +103,7 @@ class HeatPumpController : Driver
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/energystate", def (t, i, p) self.mqtt_energy_state(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/circuit1shift", def (t, i, p) self.mqtt_circuit1_shift(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwsetpoint", def (t, i, p) self.mqtt_dhw_setpoint(p) end)
+        mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwtriggerdesinfection", def (t, i, p) self.mqtt_dhw_trigger_desinfection(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/silentmode", def (t, i, p) self.mqtt_silent_mode(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/remotestop", def (t, i, p) self.mqtt_emergency_stop(p) end)
         mqtt.subscribe("home/TASMOTA-HEATPUMP/berrycmd/dhwstop", def (t, i, p) self.mqtt_dhw_stop(p) end)
@@ -121,10 +126,9 @@ class HeatPumpController : Driver
         var outputs = tasmota.get_power()
         
         if (!mqtt.connected() && self.mqtt_connected_old)
-          # After 10 minutes of disconnection from mqtt call mqtt_disconnect_timer
-          tasmota.set_timer(600000, def () self.mqtt_disconnect_timer() end, 1)
-        end
-        if (mqtt.connected  && !self.mqtt_connected_old)
+          # After 10 minutes of disconnection from mqtt call mqtt_disconnected_timer
+          tasmota.set_timer(600000, def () self.mqtt_disconnected_timer() end, 1)
+        elif (mqtt.connected() && !self.mqtt_connected_old)
           tasmota.remove_timer(1)
         end
         self.mqtt_connected_old = mqtt.connected()
@@ -155,6 +159,10 @@ class HeatPumpController : Driver
         elif (self.remote_heatcool_mode == "heat")
            heating_mode_switch = 1
            cooling_mode_switch = 0
+        elif (self.remote_heatcool_mode == "coolstop")
+           cooling_mode_switch = 0
+        elif (self.remote_heatcool_mode == "heatstop")
+           heating_mode_switch = 0
         elif (self.remote_heatcool_mode == "stop")
            heating_mode_switch = 0
            cooling_mode_switch = 0
@@ -184,15 +192,13 @@ class HeatPumpController : Driver
             heatpump_heating = false
             heatpump_cooling = false
             heatpump_dhw = false
+            self.dhw_booster_on = false
         end
 
         if (self.dhw_stop_active)
             heatpump_dhw = false
+            self.dhw_booster_on = false
         end
-
-        if (heatpump_heating) self.operation_mode = "Heating"
-        elif (heatpump_cooling) self.operation_mode = "Cooling"
-        else self.operation_mode = "Idle" end
 
         var waterpump_central_heating = (heatpump_heating || heatpump_cooling || self.pump_run)
         valve_livingroom = valve_livingroom || self.pump_run
@@ -201,11 +207,14 @@ class HeatPumpController : Driver
         # To prevent to low water temperature preventing defrost during low outside temperature
         # start heating when inlettemperature is < 18 if the water is still warm enough the heatpump wil not start
         # this overrides emergency stop because a stop could create an emergency
-        if (self.inlet_temperature < 18 && self.outside_temperature < 10)
+        if (self.inlet_temperature != nil &&
+            self.outside_temperature != nil &&
+            self.inlet_temperature < 180 &&
+            self.outside_temperature < 100)
             self.lowwatertemp_heating = true
         end
 
-        if (self.inlet_temperature > 25) 
+        if (self.inlet_temperature != nil && self.inlet_temperature > 250)
             self.lowwatertemp_heating = false
         end
 
@@ -217,6 +226,9 @@ class HeatPumpController : Driver
             waterpump_central_heating = false
         end
 
+        if (heatpump_heating) self.operation_mode = "Heating"
+        elif (heatpump_cooling) self.operation_mode = "Cooling"
+        else self.operation_mode = "Idle" end
 
         # Apply Relay outputs
         if (outputs[0] != heatpump_cooling)      tasmota.set_power(0, heatpump_cooling) end
@@ -250,40 +262,47 @@ class HeatPumpController : Driver
     end
 
     def mqtt_energy_state(payload)
-        var value = int(payload)
-        if (value >= 0 && value <= 8 && size(self.modbus_queue) < 10)
+        var value = int(number(payload))
+        if (value != nil && value >= 0 && value <= 8 && size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 9, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
     def mqtt_circuit1_shift(payload)
-        var value = int(payload)
-        if (value >= -20 && value <= 20 && size(self.modbus_queue) < 10)
+        var value = int(number(payload))
+        if (value != nil && value >= -20 && value <= 20 && size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 4, "type": "int16", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
     def mqtt_dhw_setpoint(payload)
-        var value = int(payload)
-        if (value >= 0 && value <= 80 && size(self.modbus_queue) < 10)
+        var value = int(number(payload))
+        if (value != nil && value >= 0 && value <= 80 && size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 6, "startaddress": 8, "type": "int16", "count": 1, "values": [%d]}', value * 10)
             self.modbus_queue.push(command)
         end
     end
 
+    def mqtt_dhw_trigger_desinfection(payload)
+        var value = int(number(payload))
+        if (value == 1 && size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 3, "type": "bit", "count": 1, "values": [1]}')
+            self.modbus_queue.push(command)
+        end
+    end
+    
     def mqtt_silent_mode(payload)
-        var value = int(payload) == 1
+        var value = int(number(payload)) == 1
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 2, "type": "bit", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
         end
     end
 
-
     def mqtt_emergency_stop(payload)
-        var value = int(payload) == 1
+        var value = int(number(payload)) == 1
         self.emergency_stop_active = value
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 5, "type": "bit", "count": 1, "values": [%d]}', value)
@@ -292,42 +311,57 @@ class HeatPumpController : Driver
     end
 
     def mqtt_dhw_stop(payload)
-        self.dhw_stop_active = (int(payload) == 1)
+        var value = int(number(payload)) == 1
+        self.dhw_stop_active = value
+        if (size(self.modbus_queue) < 10)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 1, "type": "bit", "count": 1, "values": [%d]}', value == 0)
+            self.modbus_queue.push(command)
+        end
     end
 
     def mqtt_dhw_booster_on(payload)
-        self.dhw_booster_on = (int(payload) == 1)
+        self.dhw_booster_on = (int(number(payload)) == 1)
     end
 
     def mqtt_heatcool_mode(payload)
         if (payload == "cool") 
           self.remote_heatcool_mode = "cool"
-        end
-        if (payload == "heat")
+        elif (payload == "heat")
           self.remote_heatcool_mode = "heat"
-        end
-        if (payload == "stop")
+        elif (payload == "stop")
           self.remote_heatcool_mode = "stop"
-        end
-        if (payload == "switch")
+        elif (payload == "coolstop")
+          self.remote_heatcool_mode = "coolstop"
+        elif (payload == "heatstop")
+          self.remote_heatcool_mode = "heatstop"
+        elif (payload == "switch")
           self.remote_heatcool_mode = "switch"
         end
     end
 
     # modbus_received(): Parses incoming Modbus JSON responses
     def modbus_received(data)
+        if (type(data) == "string")
+            data = json.load(data)
+        end
+
         if (data != nil && data['DeviceAddress'] == 1)
             var fc = data['FunctionCode']
             var sa = data['StartAddress']
             var val = data['Values']
             if (val != nil)
-                if (fc == 3 && sa == 0 && size(val) >= 10)
+                if (fc == 1 && sa == 0 && size(val) >= 6)
+                    self.emergency_stop_active = val[4]
+                    self.dhw_stop_active = val[1] == 0
+                elif (fc == 2 && sa == 0 && size(val) >= 17)
+                    self.dhw_heating_active = val[5]
+                    self.desinfection_active = val[6]
+                elif (fc == 3 && sa == 0 && size(val) >= 10)
                     self.circuit1_setpoint = val[2]
                     self.circuit1_shift = val[4]
                     self.dhw_setpoint = val[8]
                     self.energy_state = val[9]
-                end
-                if (fc == 4 && sa == 0 && size(val) >= 14)
+                elif (fc == 4 && sa == 0 && size(val) >= 14)
                     self.inlet_temperature = val[2]
                     self.outlet_temperature = val[3]
                     self.backupheater_temperature = val[4]
@@ -335,11 +369,10 @@ class HeatPumpController : Driver
                     self.water_flowrate = val[8] != 50 ? val[8] : 0
                     self.outside_temperature = val[12]
                     self.water_pressure = val[13]
-                end
-                if (fc == 4 && sa == 16 && size(val) >= 9)
+                    self.boiler_bottom_temperature = val[14]
+                elif (fc == 4 && sa == 16 && size(val) >= 9)
                     self.compressor_frequency = val[8]
-                end
-                if (fc == 4 && sa == 34 && size(val) >= 16)
+                elif (fc == 4 && sa == 34 && size(val) >= 16)
                     self.output_power = val[15]
                 end
             end
@@ -380,6 +413,10 @@ class HeatPumpController : Driver
         em_style = (mode_color != "white") ? "color:" + mode_color + ";font-weight:bold" : ""
         html += string.format("{s}Remote Heat/Cool Mode{m}<span style='%s'>%s</span>{e}", em_style, self.remote_heatcool_mode)
 
+
+        html += string.format("{s}DHW Heating Active{m}%s{e}", self.dhw_heating_active != nil ? (self.dhw_heating_active ? "Yes" : "No") : "-")
+            html += string.format("{s}DHW Desinfection Active{m}%s{e}", self.desinfection_active != nil ? (self.desinfection_active ? "Yes" : "No") : "-")
+
         # Temperatures & Sensors with "-" fallback
         html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%.1f °C", self.circuit1_setpoint * 0.1) : "-")
         html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
@@ -387,6 +424,7 @@ class HeatPumpController : Driver
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
         html += string.format("{s}DHW Setpoint{m}%s{e}", self.dhw_setpoint != nil ? string.format("%d °C", self.dhw_setpoint * 0.1) : "-")
         html += string.format("{s}Boiler Temperature{m}%s{e}", self.boiler_temperature != nil ? string.format("%.1f °C", self.boiler_temperature * 0.1) : "-")
+        html += string.format("{s}Boiler Bottom Temperature{m}%s{e}", self.boiler_bottom_temperature != nil ? string.format("%.1f °C", self.boiler_bottom_temperature * 0.1) : "-")
         html += string.format("{s}Water Pressure{m}%s{e}", self.water_pressure != nil ? string.format("%.1f bar", self.water_pressure * 0.1) : "-")
         html += string.format("{s}Water Flowrate{m}%s{e}", self.water_flowrate != nil ? string.format("%.1f l/min", self.water_flowrate * 0.1) : "-")
         html += string.format("{s}Compressor{m}%s{e}", self.compressor_frequency != nil ? string.format("%d Hz", self.compressor_frequency) : "-")
@@ -409,11 +447,11 @@ class HeatPumpController : Driver
     
     def mqtt_disconnected_timer()
         if (!mqtt.connected())
-            self.mqtt_emergency_stop(0)
-            self.mqtt_dhw_stop(0)
+            self.mqtt_emergency_stop("0")
+            self.mqtt_dhw_stop("0")
             self.mqtt_heatcool_mode("switch")
             self.remote_heat_request = false
-            self.mqtt_energy_state(2)
+            self.mqtt_energy_state("2")
         end    
     end
 end
