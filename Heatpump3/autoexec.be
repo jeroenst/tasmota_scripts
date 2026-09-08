@@ -294,7 +294,7 @@ class HeatPumpController : Driver
     end
     
     def mqtt_silent_mode(payload)
-        var value = int(number(payload)) == 1
+        var value = int(number(payload)) == 1 ? 1 : 0
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 2, "type": "bit", "count": 1, "values": [%d]}', value)
             self.modbus_queue.push(command)
@@ -302,7 +302,7 @@ class HeatPumpController : Driver
     end
 
     def mqtt_emergency_stop(payload)
-        var value = int(number(payload)) == 1
+        var value = int(number(payload)) == 1 ? 1 : 0
         self.emergency_stop_active = value
         if (size(self.modbus_queue) < 10)
             var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 5, "type": "bit", "count": 1, "values": [%d]}', value)
@@ -311,16 +311,16 @@ class HeatPumpController : Driver
     end
 
     def mqtt_dhw_stop(payload)
-        var value = int(number(payload)) == 1
+        var value = int(number(payload)) == 1 ? 1 : 0
         self.dhw_stop_active = value
         if (size(self.modbus_queue) < 10)
-            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 1, "type": "bit", "count": 1, "values": [%d]}', value == 0)
+            var command = string.format('{"deviceaddress": 1, "functioncode": 5, "startaddress": 1, "type": "bit", "count": 1, "values": [%d]}', (value == 0 ? 1 : 0))
             self.modbus_queue.push(command)
         end
     end
 
     def mqtt_dhw_booster_on(payload)
-        self.dhw_booster_on = (int(number(payload)) == 1)
+        self.dhw_booster_on = (int(number(payload)) == 1 ? 1 : 0)
     end
 
     def mqtt_heatcool_mode(payload)
@@ -352,7 +352,7 @@ class HeatPumpController : Driver
             if (val != nil)
                 if (fc == 1 && sa == 0 && size(val) >= 6)
                     self.emergency_stop_active = val[4]
-                    self.dhw_stop_active = val[1] == 0
+                    self.dhw_stop_active = val[1] == 0 ? 1 : 0
                 elif (fc == 2 && sa == 0 && size(val) >= 17)
                     self.dhw_heating_active = val[5]
                     self.desinfection_active = val[6]
