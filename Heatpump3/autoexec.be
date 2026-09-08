@@ -231,13 +231,13 @@ class HeatPumpController : Driver
         else self.operation_mode = "Idle" end
 
         # Apply Relay outputs
-        if (outputs[0] != heatpump_cooling)      tasmota.set_power(0, heatpump_cooling) end
-        if (outputs[1] != heatpump_heating)      tasmota.set_power(1, heatpump_heating) end
-        if (outputs[2] != heatpump_dhw)      tasmota.set_power(2, heatpump_dhw) end
-        if (outputs[3] != valve_livingroom)       tasmota.set_power(3, valve_livingroom) end
-        if (outputs[4] != valve_bathroom)         tasmota.set_power(4, valve_bathroom) end
+        if (outputs[0] != heatpump_cooling)            tasmota.set_power(0, heatpump_cooling) end
+        if (outputs[1] != heatpump_heating)            tasmota.set_power(1, heatpump_heating) end
+        if (outputs[2] != heatpump_dhw)                tasmota.set_power(2, heatpump_dhw) end
+        if (outputs[3] != valve_livingroom)            tasmota.set_power(3, valve_livingroom) end
+        if (outputs[4] != valve_bathroom)              tasmota.set_power(4, valve_bathroom) end
         if (outputs[5] != waterpump_central_heating)   tasmota.set_power(5, waterpump_central_heating) end
-        if (outputs[6] != self.dhw_booster_on)   tasmota.set_power(6, self.dhw_booster_on) end
+        if (outputs[6] != self.dhw_booster_on)         tasmota.set_power(6, self.dhw_booster_on) end
     end
 
     # modbus_loop(): Orchestrates Modbus traffic (polls registers or sends commands)
@@ -320,7 +320,7 @@ class HeatPumpController : Driver
     end
 
     def mqtt_dhw_booster_on(payload)
-        self.dhw_booster_on = (int(number(payload)) == 1 ? 1 : 0)
+        self.dhw_booster_on = (int(number(payload)) == 1 ? true : false)
     end
 
     def mqtt_heatcool_mode(payload)
@@ -361,7 +361,7 @@ class HeatPumpController : Driver
                     self.circuit1_shift = val[4]
                     self.dhw_setpoint = val[8]
                     self.energy_state = val[9]
-                elif (fc == 4 && sa == 0 && size(val) >= 14)
+                elif (fc == 4 && sa == 0 && size(val) >= 15)
                     self.inlet_temperature = val[2]
                     self.outlet_temperature = val[3]
                     self.backupheater_temperature = val[4]
