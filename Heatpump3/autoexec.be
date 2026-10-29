@@ -440,7 +440,7 @@ class HeatPumpController : Driver
             tasmota.set_timer(86400000, def () self.run_pump() end)
             self.pump_run = false
         else
-            tasmota.set_timer(30000, def () self.run_pump() end)
+            tasmota.set_timer(300000, def () self.run_pump() end)
             self.pump_run = true
         end
     end
