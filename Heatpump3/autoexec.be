@@ -214,8 +214,15 @@ class HeatPumpController : Driver
             self.lowwatertemp_heating = true
         end
 
-        if (self.inlet_temperature != nil && self.inlet_temperature > 250)
-            self.lowwatertemp_heating = false
+        if (self.lowwatertemp_heating)
+            heatpump_heating = true
+            waterpump_central_heating = false
+
+            if (self.inlet_temperature != nil && self.inlet_temperature > 200)
+                if (self.compressor_frequency != nil && self.compressor_frequency == 0) 
+                    self.lowwatertemp_heating = false
+                end
+            end
         end
 
         if (self.lowwatertemp_heating)
