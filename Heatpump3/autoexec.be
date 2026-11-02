@@ -415,10 +415,10 @@ class HeatPumpController : Driver
 
 
         html += string.format("{s}DHW Heating Active{m}%s{e}", self.dhw_heating_active != nil ? (self.dhw_heating_active ? "Yes" : "No") : "-")
-            html += string.format("{s}DHW Desinfection Active{m}%s{e}", self.desinfection_active != nil ? (self.desinfection_active ? "Yes" : "No") : "-")
+        html += string.format("{s}DHW Desinfection Active{m}%s{e}", self.desinfection_active != nil ? (self.desinfection_active ? "Yes" : "No") : "-")
 
         # Temperatures & Sensors with "-" fallback
-        html += string.format("{s}Circuit 1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%.1f °C", self.circuit1_setpoint * 0.1) : "-")
+        html += string.format("{s}Circuit1 Setpoint{m}%s{e}", self.circuit1_setpoint != nil ? string.format("%.1f °C", self.circuit1_setpoint * 0.1) : "-")
         html += string.format("{s}Circuit1 Shift{m}%s{e}", self.circuit1_shift != nil ? string.format("%d °C", self.circuit1_shift) : "-")
         html += string.format("{s}Inlet Temperature{m}%s{e}", self.inlet_temperature != nil ? string.format("%.1f °C", self.inlet_temperature * 0.1) : "-")
         html += string.format("{s}Outlet Temperature{m}%s{e}", self.outlet_temperature != nil ? string.format("%.1f °C", self.outlet_temperature * 0.1) : "-")
@@ -432,6 +432,26 @@ class HeatPumpController : Driver
         html += string.format("{s}Outside Temperature{m}%s{e}", self.outside_temperature != nil ? string.format("%.1f °C", self.outside_temperature * 0.1) : "-")
 
         tasmota.web_send_decimal(html)
+    end
+    
+    def json_append()
+        var data = {
+            "Mode": self.operation_mode,
+            "OutsideTemp": self.outside_temperature != nil ? self.outside_temperature / 10.0 : nil,
+            "InletTemp": self.inlet_temperature != nil ? self.inlet_temperature / 10.0 : nil,
+            "OutletTemp": self.outlet_temperature != nil ? self.outlet_temperature / 10.0 : nil,
+            "DhwSetpoint": self.dhw_setpoint != nil ? self.dhw_setpoint / 10.0 : nil,
+            "BoilerTemp": self.boiler_temperature != nil ? self.boiler_temperature / 10.0 : nil,
+            "BoilerBottomTemp": self.boiler_bottom_temperature != nil ? self.boiler_bottom_temperature / 10.0 : nil,
+            "FlowRate": self.water_flowrate != nil ? self.water_flowrate / 10.0 : nil,
+            "Pressure": self.water_pressure != nil ? self.water_pressure / 10.0 : nil,
+            "CompressorFreq": self.compressor_frequency,
+            "ThermostatLivingRoom": self.switchinput_livingroom,
+            "ThermostatBathroom": self.switchinput_bathroom
+        }
+        # Serialize the dictionary to a JSON chunk prefixing it with a separator comma
+        var msg = string.format(",\"HP_Controller\":%s", json.dump(data))
+        tasmota.response_append(msg)
     end
 
     # run_pump enables the pump once a day to prevent them getting stuck
