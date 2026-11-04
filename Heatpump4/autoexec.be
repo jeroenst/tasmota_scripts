@@ -131,7 +131,7 @@ class HeatPumpController : Driver
         # this overrides emergency stop because a stop could create an emergency
         if (self.inlet_temperature != nil &&
             self.outside_temperature != nil &&
-            self.inlet_temperature < 180 &&
+            self.inlet_temperature < 200 &&
             self.outside_temperature < 100)
             self.lowwatertemp_heating = true
         end
@@ -140,7 +140,14 @@ class HeatPumpController : Driver
             heatpump_heating = true
             waterpump_central_heating = false
 
-            if (self.inlet_temperature != nil && self.inlet_temperature > 200)
+            if (self.inlet_temperature != nil && self.inlet_temperature > 220)
+                # Stop after 30 minutes to prevent heating the house with 
+                # the heatpump when the water is still too cold
+                if (self.inlet_temperature > 280)
+                    self.lowwatertemp_heating = false
+                end
+
+                # Stop if the compressor is not running anymore, this means the water is warm enough
                 if (self.compressor_frequency != nil && self.compressor_frequency == 0) 
                     self.lowwatertemp_heating = false
                 end
