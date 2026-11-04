@@ -153,21 +153,6 @@ class HeatPumpController : Driver
         var valve_livingroom = false
         var valve_bathroom = false
         
-        if (self.remote_heatcool_mode == "cool") 
-           heating_mode_switch = 0
-           cooling_mode_switch = 1
-        elif (self.remote_heatcool_mode == "heat")
-           heating_mode_switch = 1
-           cooling_mode_switch = 0
-        elif (self.remote_heatcool_mode == "coolstop")
-           cooling_mode_switch = 0
-        elif (self.remote_heatcool_mode == "heatstop")
-           heating_mode_switch = 0
-        elif (self.remote_heatcool_mode == "stop")
-           heating_mode_switch = 0
-           cooling_mode_switch = 0
-        end
-
         # Main logic based on the 3-way switch
         if (heating_mode_switch)
             if (thermostat_livingroom) 
@@ -204,25 +189,23 @@ class HeatPumpController : Driver
         valve_livingroom = valve_livingroom || self.pump_run
         valve_bathroom = valve_bathroom || self.pump_run
 
+        if (self.remote_heatcool_mode == "coolstop")
+            heatpump_cooling = false
+        elif (self.remote_heatcool_mode == "heatstop")
+            heatpump_heating = false
+        elif (self.remote_heatcool_mode == "stop")
+            heatpump_heating = false
+            heatpump_cooling = false
+        end
+
         # To prevent to low water temperature preventing defrost during low outside temperature
-        # start heating when inlettemperature is < 18 if the water is still warm enough the heatpump wil not start
+        # start heating when inlet temperature is < 20 if the water is still warm enough the heatpump wil not start
         # this overrides emergency stop because a stop could create an emergency
         if (self.inlet_temperature != nil &&
             self.outside_temperature != nil &&
-            self.inlet_temperature < 180 &&
+            self.inlet_temperature < 200 &&
             self.outside_temperature < 100)
             self.lowwatertemp_heating = true
-        end
-
-        if (self.lowwatertemp_heating)
-            heatpump_heating = true
-            waterpump_central_heating = false
-
-            if (self.inlet_temperature != nil && self.inlet_temperature > 200)
-                if (self.compressor_frequency != nil && self.compressor_frequency == 0) 
-                    self.lowwatertemp_heating = false
-                end
-            end
         end
 
         if (self.lowwatertemp_heating)
@@ -231,7 +214,21 @@ class HeatPumpController : Driver
             valve_livingroom = false
             valve_bathroom = false
             waterpump_central_heating = false
+
+            if (self.inlet_temperature != nil && self.inlet_temperature > 220)
+                # Stop after 30 minutes to prevent heating the house with 
+                # the heatpump when the water is still too cold
+                if (self.inlet_temperature > 280)
+                    self.lowwatertemp_heating = false
+                end
+
+                # Stop if the compressor is not running anymore, this means the water is warm enough
+                if (self.compressor_frequency != nil && self.compressor_frequency == 0) 
+                    self.lowwatertemp_heating = false
+                end
+            end
         end
+        ###
 
         if (heatpump_heating) self.operation_mode = "Heating"
         elif (heatpump_cooling) self.operation_mode = "Cooling"
@@ -331,11 +328,7 @@ class HeatPumpController : Driver
     end
 
     def mqtt_heatcool_mode(payload)
-        if (payload == "cool") 
-          self.remote_heatcool_mode = "cool"
-        elif (payload == "heat")
-          self.remote_heatcool_mode = "heat"
-        elif (payload == "stop")
+        if (payload == "stop")
           self.remote_heatcool_mode = "stop"
         elif (payload == "coolstop")
           self.remote_heatcool_mode = "coolstop"
