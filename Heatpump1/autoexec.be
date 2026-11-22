@@ -37,9 +37,16 @@ class HeatPumpController : Driver
     var circuit1_shift
     var output_power
     var pump_run
+    var thermostat_valve_livingroom
+    var thermostat_valve_kitchen
+    var thermostat_valve_appartment
     var mqtt_connected_old
     var circuit1_setpoint
     var dhw_setpoint
+    var livingroom_shutdown_pending
+    var kitchen_shutdown_pending
+    var appartment_shutdown_pending
+    var heatpump_shutdown_pending
     
     # Store switch states for UI display
     var switchinput_livingroom
@@ -68,9 +75,16 @@ class HeatPumpController : Driver
         self.circuit1_shift = nil
         self.output_power = nil
         self.pump_run = false
+        self.thermostat_valve_livingroom = false
+        self.thermostat_valve_kitchen = false
+        self.thermostat_valve_appartment = false
         self.mqtt_connected_old = false
         self.circuit1_setpoint = nil
         self.dhw_setpoint = nil
+        self.livingroom_shutdown_pending = false
+        self.kitchen_shutdown_pending = false
+        self.appartment_shutdown_pending = false
+        self.heatpump_shutdown_pending = false
         
         # Initialize UI switch labels
         self.switchinput_livingroom = "Off"
@@ -107,6 +121,9 @@ class HeatPumpController : Driver
         
         var inputs = tasmota.get_switches()
         var outputs = tasmota.get_power()
+        var previous_thermostat_valve_livingroom = self.thermostat_valve_livingroom
+        var previous_thermostat_valve_kitchen = self.thermostat_valve_kitchen
+        var previous_thermostat_valve_appartment = self.thermostat_valve_appartment
         
         if (!mqtt.connected() && self.mqtt_connected_old)
           # After 10 minutes of disconnection from mqtt call mqtt_disconnect_timer
@@ -192,10 +209,61 @@ class HeatPumpController : Driver
             valve_appartment = false
         end
 
-        if (self.pump_run)
-            valve_livingroom = true
-            valve_kitchen = true
-            valve_appartment = true
+        self.thermostat_valve_livingroom = valve_livingroom
+        self.thermostat_valve_kitchen = valve_kitchen
+        self.thermostat_valve_appartment = valve_appartment
+
+        # Hold each thermostat-derived valve demand for 30 minutes after it ends.
+        if (self.remote_stop_active)
+            if (self.livingroom_shutdown_pending) tasmota.remove_timer(2) end
+            if (self.kitchen_shutdown_pending) tasmota.remove_timer(3) end
+            if (self.appartment_shutdown_pending) tasmota.remove_timer(4) end
+            self.livingroom_shutdown_pending = false
+            self.kitchen_shutdown_pending = false
+            self.appartment_shutdown_pending = false
+        else
+            if (valve_livingroom)
+                if (self.livingroom_shutdown_pending) tasmota.remove_timer(2) end
+                self.livingroom_shutdown_pending = false
+            elif (previous_thermostat_valve_livingroom && !self.livingroom_shutdown_pending)
+                self.livingroom_shutdown_pending = true
+                tasmota.set_timer(1800000, def () self.livingroom_shutdown_timer() end, 2)
+            end
+            if (self.livingroom_shutdown_pending) valve_livingroom = true end
+
+            if (valve_kitchen)
+                if (self.kitchen_shutdown_pending) tasmota.remove_timer(3) end
+                self.kitchen_shutdown_pending = false
+            elif (previous_thermostat_valve_kitchen && !self.kitchen_shutdown_pending)
+                self.kitchen_shutdown_pending = true
+                tasmota.set_timer(1800000, def () self.kitchen_shutdown_timer() end, 3)
+            end
+            if (self.kitchen_shutdown_pending) valve_kitchen = true end
+
+            if (valve_appartment)
+                if (self.appartment_shutdown_pending) tasmota.remove_timer(4) end
+                self.appartment_shutdown_pending = false
+            elif (previous_thermostat_valve_appartment && !self.appartment_shutdown_pending)
+                self.appartment_shutdown_pending = true
+                tasmota.set_timer(1800000, def () self.appartment_shutdown_timer() end, 4)
+            end
+            if (self.appartment_shutdown_pending) valve_appartment = true end
+        end
+
+        # Keep the heat pump on for 20 minutes after demand ends; new demand cancels the timer.
+        if (heatpump_heating || heatpump_cooling)
+            if (self.heatpump_shutdown_pending) tasmota.remove_timer(5) end
+            self.heatpump_shutdown_pending = false
+        elif (gas_mode_switch || self.remote_stop_active)
+            if (self.heatpump_shutdown_pending) tasmota.remove_timer(5) end
+            self.heatpump_shutdown_pending = false
+        elif ((outputs[4] || outputs[5]) && !self.heatpump_shutdown_pending)
+            self.heatpump_shutdown_pending = true
+            tasmota.set_timer(1800000, def () self.heatpump_shutdown_timer() end, 5)
+        end
+        if (self.heatpump_shutdown_pending)
+            heatpump_heating = outputs[4]
+            heatpump_cooling = outputs[5]
         end
 
         if (heatpump_heating) self.operation_mode = "Heating"
@@ -205,6 +273,13 @@ class HeatPumpController : Driver
 
         if (heatpump_gas_request)
             gas_boiler = true
+        end
+
+
+        if (self.pump_run)
+            valve_livingroom = true
+            valve_kitchen = true
+            valve_appartment = true
         end
 
         # Apply Relay outputs
@@ -336,7 +411,7 @@ class HeatPumpController : Driver
             tasmota.set_timer(86400000, def () self.run_pump() end)
             self.pump_run = false
         else
-            tasmota.set_timer(30000, def () self.run_pump() end)
+            tasmota.set_timer(120000, def () self.run_pump() end)
             self.pump_run = true
         end
     end
@@ -346,6 +421,27 @@ class HeatPumpController : Driver
             self.mqtt_remote_stop(0)
             self.mqtt_energy_state(2)
         end    
+    end
+
+    def livingroom_shutdown_timer()
+        self.livingroom_shutdown_pending = false
+        tasmota.set_power(0, false)
+    end
+
+    def kitchen_shutdown_timer()
+        self.kitchen_shutdown_pending = false
+        tasmota.set_power(1, false)
+    end
+
+    def appartment_shutdown_timer()
+        self.appartment_shutdown_pending = false
+        tasmota.set_power(2, false)
+    end
+
+    def heatpump_shutdown_timer()
+        self.heatpump_shutdown_pending = false
+        tasmota.set_power(4, false)
+        tasmota.set_power(5, false)
     end
 end
 
