@@ -216,8 +216,7 @@ class HeatPumpController : Driver
             waterpump_central_heating = false
 
             if (self.inlet_temperature != nil && self.inlet_temperature > 220)
-                # Stop after 30 minutes to prevent heating the house with 
-                # the heatpump when the water is still too cold
+                # Stop when inlet is 28 degrees
                 if (self.inlet_temperature > 280)
                     self.lowwatertemp_heating = false
                 end
